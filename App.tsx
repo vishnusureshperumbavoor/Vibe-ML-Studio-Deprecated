@@ -1,34 +1,43 @@
-import React, { useState } from 'react';
-import { Plus, Play, Settings, Bot, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, Play, Sparkles, Send, Trash2, StopCircle, Zap } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { Cell } from './components/Cell';
 import { Button } from './components/Button';
 import { CellData, CellType } from './types';
-import { simulateCodeExecution, generateNoteContent } from './services/geminiService';
+import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/geminiService';
 
 const INITIAL_CELLS: CellData[] = [
   {
     id: '1',
     type: 'markdown',
-    content: '# Welcome to Gemini Notebook\nThis is a React-based interactive notebook environment powered by **Google Gemini**.\n\n- Write **Markdown** for text.\n- Write **Python** code and click *Play* to simulate execution.\n- Use the **AI Assistant** to generate content.',
-    status: 'idle',
-  },
-  {
-    id: '2',
-    type: 'code',
-    content: 'print("Hello, Gemini!")\n\n# Calculate something simple\nx = [1, 2, 3, 4, 5]\ny = [val * 2 for val in x]\nprint(f"Original: {x}")\nprint(f"Doubled: {y}")',
+    content: '# VibeML Studio\n\nWelcome to your autonomous AI machine learning workspace.\n\nDescribe your task below (e.g., *"Fine-tune a ResNet on CIFAR-10"*) and I will build, run, and debug the entire workflow for you.',
     status: 'idle',
   }
 ];
 
 export default function App() {
   const [cells, setCells] = useState<CellData[]>(INITIAL_CELLS);
+  const cellsRef = useRef<CellData[]>(INITIAL_CELLS); // Ref to access latest state in async loop
+  
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [showAiModal, setShowAiModal] = useState(false);
+  const [isAutoRunning, setIsAutoRunning] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const stopExecutionRef = useRef(false);
 
-  // Focus management
+  // Sync ref with state
+  useEffect(() => {
+    cellsRef.current = cells;
+  }, [cells]);
+
+  // Auto-scroll to bottom when new cells are added
+  useEffect(() => {
+    if (cells.length > 1 && !activeCellId && isGenerating) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [cells.length, isGenerating, activeCellId]);
+
   const handleCellFocus = (id: string) => {
     setActiveCellId(id);
   };
@@ -63,6 +72,13 @@ export default function App() {
     if (activeCellId === id) setActiveCellId(null);
   };
 
+  const clearAll = () => {
+      setCells([]);
+      setActiveCellId(null);
+      stopExecutionRef.current = true;
+      setIsAutoRunning(false);
+  }
+
   const moveCell = (id: string, direction: 'up' | 'down') => {
     const index = cells.findIndex(c => c.id === id);
     if (index === -1) return;
@@ -75,14 +91,18 @@ export default function App() {
     setCells(newCells);
   };
 
-  const runCell = async (id: string) => {
-    const cell = cells.find(c => c.id === id);
-    if (!cell || cell.type !== 'code') return;
-
-    // Set status to running
+  /**
+   * Executes a single cell. 
+   * Returns a promise that resolves to the success status.
+   */
+  const executeSingleCell = async (id: string): Promise<{ success: boolean; output: string }> => {
+    // Optimistic update
     setCells(prev => prev.map(c => c.id === id ? { ...c, status: 'running', output: undefined } : c));
 
-    // Simulate execution with Gemini
+    // Get current content from ref to ensure freshness
+    const cell = cellsRef.current.find(c => c.id === id);
+    if (!cell) return { success: false, output: 'Cell not found' };
+
     const result = await simulateCodeExecution(cell.content);
 
     setCells(prev => prev.map(c => c.id === id ? { 
@@ -92,166 +112,294 @@ export default function App() {
         executionCount: (c.executionCount || 0) + 1,
         lastRun: Date.now()
     } : c));
+
+    return { 
+        success: !result.error, 
+        output: result.error || result.text 
+    };
   };
 
-  const runAll = async () => {
-      for (const cell of cells) {
-          if (cell.type === 'code') {
-              await runCell(cell.id);
-          }
-      }
+  /**
+   * Main Autonomous Loop
+   * Executes cells sequentially. If an error occurs, it attempts to fix it and retry.
+   */
+  const executeNotebook = async (startIndex: number = 0) => {
+    if (isAutoRunning) return;
+    setIsAutoRunning(true);
+    stopExecutionRef.current = false;
+
+    // Use a local index to iterate through the cells from the ref
+    // We re-read cellsRef.current.length every iteration in case cells are added/removed (though unlikely during auto-run)
+    for (let i = startIndex; i < cellsRef.current.length; i++) {
+        if (stopExecutionRef.current) break;
+
+        const cell = cellsRef.current[i];
+        if (cell.type !== 'code') continue; // Skip markdown
+
+        // Scroll current cell into view
+        const el = document.getElementById(`cell-${cell.id}`); // Assuming we add ID to Cell component
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        let attempts = 0;
+        const maxAttempts = 3;
+        let success = false;
+
+        while (!success && attempts < maxAttempts && !stopExecutionRef.current) {
+            attempts++;
+            
+            // Run the cell
+            const result = await executeSingleCell(cell.id);
+            
+            if (result.success) {
+                success = true;
+            } else {
+                // Error encountered! Engage Auto-Fix.
+                if (attempts < maxAttempts) {
+                    // Update Status to Fixing
+                    setCells(prev => prev.map(c => c.id === cell.id ? { ...c, status: 'fixing' } : c));
+                    
+                    // Get the fix
+                    const fixedCode = await fixCodeError(cellsRef.current[i].content, result.output);
+                    
+                    // Update cell content with fix
+                    setCells(prev => prev.map(c => c.id === cell.id ? { ...c, content: fixedCode } : c));
+                    
+                    // Wait a moment for visual clarity
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+
+        // If we failed after max attempts, stop the chain
+        if (!success) {
+            setIsAutoRunning(false);
+            return;
+        }
+        
+        // Short pause between cells for visual pacing
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    setIsAutoRunning(false);
   };
 
-  const handleAiGenerate = async () => {
-    if (!aiPrompt.trim()) return;
+  // Wrapper for manual single cell run
+  const handleManualRun = async (id: string) => {
+      await executeSingleCell(id);
+  };
+
+  const handleStop = () => {
+      stopExecutionRef.current = true;
+      setIsAutoRunning(false);
+  };
+
+  const handleSubmitPrompt = async () => {
+    if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
     
-    const result = await generateNoteContent(aiPrompt);
-    
-    setIsGenerating(false);
-    setShowAiModal(false);
-    setAiPrompt('');
+    // Add a temporary "Thinking" markdown cell
+    const thinkingId = uuidv4();
+    setCells(prev => [...prev, {
+        id: thinkingId,
+        type: 'markdown',
+        content: '_Architecting solution & planning execution flow..._',
+        status: 'idle'
+    }]);
 
-    if (result.text) {
-        const newCell: CellData = {
+    const result = await generateNotebookStructure(prompt);
+    
+    // Remove thinking cell
+    setCells(prev => prev.filter(c => c.id !== thinkingId));
+
+    if (result.cells && result.cells.length > 0) {
+        const newCells: CellData[] = result.cells.map(c => ({
+            id: uuidv4(),
+            type: c.type,
+            content: c.content,
+            status: 'idle'
+        }));
+        
+        const previousLength = cells.length; // capture current length to know where to start running
+        
+        // Update state with new cells
+        setCells(prev => {
+            const updated = [...prev, ...newCells];
+            cellsRef.current = updated; // Manually update ref immediately for safe measure
+            return updated;
+        });
+        
+        setPrompt('');
+        setIsGenerating(false);
+
+        // START AUTO EXECUTION IMMEDIATELY
+        // Allow state to settle briefly then start
+        setTimeout(() => {
+            executeNotebook(previousLength);
+        }, 500);
+
+    } else if (result.error) {
+         setCells(prev => [...prev, {
             id: uuidv4(),
             type: 'markdown',
-            content: result.text,
-            status: 'success'
-        };
-        setCells(prev => [...prev, newCell]);
+            content: `**Error generating plan:** ${result.error}`,
+            status: 'error'
+        }]);
+        setIsGenerating(false);
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSubmitPrompt();
+      }
   };
 
   return (
     <div className="flex flex-col h-screen bg-notebook-bg text-notebook-text font-sans selection:bg-blue-500/30">
       
-      {/* Top Header */}
-      <header className="flex-none h-14 border-b border-notebook-cellBorder bg-notebook-sidebar flex items-center px-4 justify-between z-10 sticky top-0">
+      {/* Top Header - Minimalist */}
+      <header className="flex-none h-14 border-b border-notebook-cellBorder bg-notebook-sidebar/50 backdrop-blur-md flex items-center px-4 justify-between z-10 sticky top-0">
         <div className="flex items-center gap-3">
-            <div className="h-8 w-8 bg-orange-600 rounded-md flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                <Sparkles size={18} />
+            <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-white shadow-lg transition-all duration-500 ${isAutoRunning ? 'bg-gradient-to-br from-green-400 to-emerald-600 shadow-emerald-900/20' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-purple-900/20'}`}>
+                {isAutoRunning ? <Zap size={16} className="animate-pulse" /> : <Sparkles size={16} />}
             </div>
             <div>
-                <h1 className="text-sm font-semibold text-notebook-text">Untitled Notebook.ipynb</h1>
-                <div className="text-xs text-notebook-textMuted flex gap-2 cursor-pointer">
-                    <span className="hover:text-white">File</span>
-                    <span className="hover:text-white">Edit</span>
-                    <span className="hover:text-white">View</span>
-                </div>
+                <h1 className="text-sm font-semibold text-notebook-text tracking-wide">VibeML Studio</h1>
+                <span className="text-xs text-notebook-textMuted flex items-center gap-2">
+                    {isAutoRunning ? (
+                        <span className="text-emerald-400 flex items-center gap-1">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Auto-Pilot Active
+                        </span>
+                    ) : 'Ready for input'}
+                </span>
             </div>
         </div>
 
         <div className="flex items-center gap-2">
-             <Button size="sm" variant="ghost" onClick={() => setShowAiModal(true)}>
-                <Bot size={16} className="mr-2 text-blue-400" />
-                Ask AI
+             <Button size="sm" variant="ghost" onClick={clearAll} title="Clear Notebook" disabled={isAutoRunning}>
+                <Trash2 size={16} />
              </Button>
              <div className="h-4 w-px bg-notebook-cellBorder mx-2"></div>
-             <Button size="sm" variant="secondary" onClick={runAll}>
-                <Play size={14} className="mr-2" />
-                Run All
-             </Button>
-             <Button size="sm" variant="primary">
-                Connect
-             </Button>
-             <div className="h-8 w-8 rounded-full bg-purple-700 text-white flex items-center justify-center ml-2 text-xs font-bold border border-notebook-cellBorder">
-                J
-             </div>
+             {isAutoRunning ? (
+                 <Button size="sm" variant="danger" onClick={handleStop} className="border-red-900/50 bg-red-900/20 text-red-400 hover:bg-red-900/40">
+                    <StopCircle size={14} className="mr-2" />
+                    Stop Auto-Pilot
+                 </Button>
+             ) : (
+                 <Button size="sm" variant="primary" onClick={() => executeNotebook(0)} className="bg-indigo-600 hover:bg-indigo-700 border-none">
+                    <Play size={14} className="mr-2" />
+                    Run All
+                 </Button>
+             )}
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-grow flex overflow-hidden">
+      {/* Main Content Area */}
+      <div className="flex-grow flex overflow-hidden relative">
         
-        {/* Sidebar (Visual Only) */}
-        <div className="flex-none w-16 border-r border-notebook-cellBorder bg-notebook-sidebar flex flex-col items-center py-4 gap-4 hidden md:flex">
-            <div className="p-2 rounded-md hover:bg-[#2d2d2d] text-notebook-textMuted hover:text-white cursor-pointer transition-colors" title="Table of Contents">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
-            </div>
-            <div className="p-2 rounded-md hover:bg-[#2d2d2d] text-notebook-textMuted hover:text-white cursor-pointer transition-colors" title="Find and Replace">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            </div>
-            <div className="p-2 rounded-md hover:bg-[#2d2d2d] text-notebook-textMuted hover:text-white cursor-pointer transition-colors" title="Files">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-            </div>
-            <div className="mt-auto p-2 text-notebook-textMuted hover:text-white transition-colors cursor-pointer">
-                <Settings size={20} />
-            </div>
-        </div>
-
         {/* Notebook Area */}
-        <main className="flex-grow overflow-y-auto bg-notebook-bg p-4 md:p-8 scroll-smooth">
-            <div className="max-w-4xl mx-auto pb-40">
+        <main className="flex-grow overflow-y-auto p-4 md:p-8 scroll-smooth pb-48">
+            <div className="max-w-4xl mx-auto min-h-[50vh]">
                 
+                {cells.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-64 text-notebook-textMuted">
+                        <Sparkles size={48} className="mb-4 text-notebook-cellBorder" />
+                        <p>Ready to vibe. Type a prompt below.</p>
+                    </div>
+                )}
+
                 {cells.map((cell) => (
-                    <Cell
-                        key={cell.id}
-                        cell={cell}
-                        isActive={activeCellId === cell.id}
-                        onFocus={() => handleCellFocus(cell.id)}
-                        onChange={updateCellContent}
-                        onRun={runCell}
-                        onDelete={deleteCell}
-                        onMoveUp={(id) => moveCell(id, 'up')}
-                        onMoveDown={(id) => moveCell(id, 'down')}
-                        onTypeChange={updateCellType}
-                    />
+                    <div id={`cell-${cell.id}`} key={cell.id}>
+                        <Cell
+                            cell={cell}
+                            isActive={activeCellId === cell.id}
+                            onFocus={() => handleCellFocus(cell.id)}
+                            onChange={updateCellContent}
+                            onRun={handleManualRun}
+                            onDelete={deleteCell}
+                            onMoveUp={(id) => moveCell(id, 'up')}
+                            onMoveDown={(id) => moveCell(id, 'down')}
+                            onTypeChange={updateCellType}
+                        />
+                    </div>
                 ))}
 
-                {/* Add Cell Controls */}
-                <div className="group flex justify-center items-center gap-4 py-6 opacity-80 hover:opacity-100 transition-opacity">
-                    <div className="h-px bg-notebook-cellBorder flex-grow group-hover:bg-blue-500/50 transition-colors"></div>
-                    <div className="flex gap-2">
-                        <Button size="sm" variant="secondary" className="shadow-lg hover:shadow-xl transition-all" onClick={() => addCell('code')}>
-                            <Plus size={14} className="mr-1" /> Code
-                        </Button>
-                        <Button size="sm" variant="secondary" className="shadow-lg hover:shadow-xl transition-all" onClick={() => addCell('markdown')}>
-                            <Plus size={14} className="mr-1" /> Text
-                        </Button>
+                <div ref={bottomRef} className="h-4" />
+                
+                {/* Manual Add Buttons (Ghosted) */}
+                {!isAutoRunning && (
+                    <div className="group flex justify-center items-center gap-4 py-8 opacity-40 hover:opacity-100 transition-opacity">
+                        <div className="h-px bg-notebook-cellBorder flex-grow"></div>
+                        <div className="flex gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => addCell('code')}>
+                                <Plus size={14} className="mr-1" /> Code
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => addCell('markdown')}>
+                                <Plus size={14} className="mr-1" /> Text
+                            </Button>
+                        </div>
+                        <div className="h-px bg-notebook-cellBorder flex-grow"></div>
                     </div>
-                    <div className="h-px bg-notebook-cellBorder flex-grow group-hover:bg-blue-500/50 transition-colors"></div>
-                </div>
+                )}
 
             </div>
         </main>
       </div>
 
-      {/* AI Assistant Modal */}
-      {showAiModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-[#1e1e1e] border border-notebook-cellBorder rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn scale-100">
-                <div className="p-4 border-b border-notebook-cellBorder flex justify-between items-center bg-[#252526]">
-                    <div className="flex items-center gap-2 text-blue-400 font-medium">
-                        <Bot size={20} />
-                        <span>AI Assistant</span>
-                    </div>
-                    <button onClick={() => setShowAiModal(false)} className="text-gray-400 hover:text-white transition-colors">
-                        <Plus size={20} className="rotate-45" />
+      {/* Bottom Prompt Bar - Floating */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-notebook-bg via-notebook-bg to-transparent z-20 pointer-events-none">
+         <div className="max-w-3xl mx-auto pointer-events-auto">
+            <div className={`relative bg-[#1e1e1e] border transition-colors duration-300 rounded-xl shadow-2xl overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-indigo-500/50 shadow-indigo-500/10' : 'border-notebook-cellBorder hover:border-gray-600'}`}>
+                
+                {/* Input Area */}
+                <div className="flex items-end p-2">
+                    <textarea 
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={isAutoRunning ? "Vibe Mode Active: Monitoring execution..." : "Describe your ML task (e.g., 'Train a BERT model for sentiment analysis on IMDB')..."}
+                        className="w-full bg-transparent text-gray-200 placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
+                        rows={1}
+                        style={{ minHeight: '50px' }}
+                        disabled={isGenerating || isAutoRunning}
+                    />
+                    
+                    <button 
+                        onClick={handleSubmitPrompt}
+                        disabled={!prompt.trim() || isGenerating || isAutoRunning}
+                        className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
+                            prompt.trim() && !isGenerating && !isAutoRunning
+                            ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md' 
+                            : 'bg-notebook-cellBorder/30 text-gray-500 cursor-not-allowed'
+                        }`}
+                    >
+                        {isGenerating ? (
+                            <div className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />
+                        ) : (
+                            <Send size={18} />
+                        )}
                     </button>
                 </div>
-                <div className="p-6">
-                    <p className="text-sm text-gray-300 mb-4">
-                        Describe what you want to create (e.g., "Write a Python script to calculate Fibonacci numbers" or "Explain Linear Regression").
-                    </p>
-                    <textarea 
-                        className="w-full bg-[#2d2d2d] border border-notebook-cellBorder rounded-md p-3 text-sm text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none h-32 placeholder-gray-500"
-                        placeholder="How can I help you today?"
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        autoFocus
-                    />
-                    <div className="flex justify-end mt-4 gap-2">
-                        <Button variant="ghost" onClick={() => setShowAiModal(false)}>Cancel</Button>
-                        <Button variant="primary" onClick={handleAiGenerate} isLoading={isGenerating}>
-                            <Sparkles size={16} className="mr-2" />
-                            Generate
-                        </Button>
+                
+                {/* Loading Progress Bar */}
+                {(isGenerating || isAutoRunning) && (
+                    <div className="h-1 w-full bg-[#131313] overflow-hidden">
+                        <div className={`h-full ${isGenerating ? 'bg-indigo-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
                     </div>
-                </div>
+                )}
             </div>
-        </div>
-      )}
+            
+            <div className="text-center mt-2 text-xs text-notebook-textMuted opacity-70">
+                Gemini 2.5 Flash • VibeML Auto-Pilot
+            </div>
+         </div>
+      </div>
+
     </div>
   );
 }
