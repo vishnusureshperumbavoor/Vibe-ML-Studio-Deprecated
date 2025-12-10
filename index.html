@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
@@ -16,11 +17,22 @@
             },
             colors: {
               notebook: {
-                bg: '#ffffff',
-                sidebar: '#f8f9fa',
-                cell: '#f8f9fa',
-                cellBorder: '#e5e7eb',
-                accent: '#3b82f6',
+                bg: '#131313',        // Main background (Colab dark)
+                sidebar: '#1e1e1e',   // Header/Sidebar (slightly lighter)
+                cell: '#28292a',      // Code cell background
+                cellBorder: '#3e4042',// Borders
+                text: '#e8eaed',      // Main text
+                textMuted: '#9aa0a6', // Muted text
+                accent: '#8ab4f8',    // Blue accent
+              }
+            },
+            animation: {
+              fadeIn: 'fadeIn 0.2s ease-in-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
               }
             }
           }
@@ -29,23 +41,27 @@
     </script>
     <style>
       body {
-        background-color: #ffffff;
-        color: #1f2937;
+        background-color: #131313;
+        color: #e8eaed;
       }
       /* Custom scrollbar for a cleaner look */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent;
+        background: #131313;
+      }
+      ::-webkit-scrollbar-corner {
+        background: #131313;
       }
       ::-webkit-scrollbar-thumb {
-        background: #d1d5db;
-        border-radius: 4px;
+        background: #3e4042;
+        border-radius: 5px;
+        border: 2px solid #131313;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #9ca3af;
+        background: #5f6368;
       }
     </style>
   <script type="importmap">
