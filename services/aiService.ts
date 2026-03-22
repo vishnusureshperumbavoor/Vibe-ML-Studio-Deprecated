@@ -42,14 +42,30 @@ async function callKimi(messages: any[], temperature = 0.1) {
 
 export const simulateCodeExecution = async (code: string): Promise<GeminiResponse> => {
   try {
-    const output = await callKimi([
-      { role: 'system', content: SIMULATOR_SYSTEM_PROMPT },
-      { role: 'user', content: `Code to execute:\n${code}` }
-    ]);
-    return { text: output || '' };
+    // Phase 1 achieved: Instead of asking Kimi to simulate, we send it to our FastAPI server!
+    const response = await fetch("http://127.0.0.1:8000/execute", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ code })
+    });
+
+    if (!response.ok) {
+       throw new Error(`Execution server responded with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // If Python threw a hardcore Runtime error 
+    if (data.is_error && data.raw_error) {
+       return { text: data.output || '', error: data.raw_error };
+    }
+
+    return { text: data.output || '' };
   } catch (error: any) {
-    console.error("Kimi Simulation Error:", error);
-    return { text: '', error: error.message || "Failed to simulate code execution via Kimi." };
+    console.error("Local Execution Connection Error:", error);
+    return { text: '', error: "Make sure the FastAPI backend is running! Run: `python server/main.py`\n\nError: " + error.message };
   }
 };
 

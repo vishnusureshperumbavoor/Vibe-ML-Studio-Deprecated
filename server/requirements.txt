@@ -1,0 +1,17 @@
+# Backend Server Requirements
+fastapi>=0.110.0
+uvicorn>=0.29.0
+pydantic>=2.6.0
+
+# Base Data Science Utilities (needed for Kimi's auto-generated ML scripts)
+numpy>=1.26.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+
+# Core Machine Learning Architectures (Uncomment to install later)
+# torch>=2.2.0
+# torchvision>=0.17.0
+# transformers>=4.38.0
+# datasets>=2.18.0
+# monai>=1.3.0
