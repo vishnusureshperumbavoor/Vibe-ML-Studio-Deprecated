@@ -275,7 +275,7 @@ export default function App() {
                             </span>
                             Auto-Pilot Active
                         </span>
-                    ) : 'Ready for input'}
+                    ) : 'Vibe Coding is here. Why not Vibe Train'}
                 </span>
             </div>
         </div>
