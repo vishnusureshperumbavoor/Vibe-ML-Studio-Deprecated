@@ -256,10 +256,10 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-notebook-bg text-notebook-text font-sans selection:bg-blue-500/30">
+    <div className="flex flex-col h-screen bg-notebook-bg text-notebook-text font-sans selection:bg-blue-200">
       
       {/* Top Header - Minimalist */}
-      <header className="flex-none h-14 border-b border-notebook-cellBorder bg-notebook-sidebar/50 backdrop-blur-md flex items-center px-4 justify-between z-10 sticky top-0">
+      <header className="flex-none h-14 border-b border-notebook-cellBorder bg-notebook-sidebar flex items-center px-4 justify-between z-10 sticky top-0">
         <div className="flex items-center gap-3">
             <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-white shadow-lg transition-all duration-500 ${isAutoRunning ? 'bg-gradient-to-br from-green-400 to-emerald-600 shadow-emerald-900/20' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-purple-900/20'}`}>
                 {isAutoRunning ? <Zap size={16} className="animate-pulse" /> : <Sparkles size={16} />}
@@ -354,7 +354,7 @@ export default function App() {
       {/* Bottom Prompt Bar - Floating */}
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-notebook-bg via-notebook-bg to-transparent z-20 pointer-events-none">
          <div className="max-w-3xl mx-auto pointer-events-auto">
-            <div className={`relative bg-[#1e1e1e] border transition-colors duration-300 rounded-xl shadow-2xl overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-indigo-500/50 shadow-indigo-500/10' : 'border-notebook-cellBorder hover:border-gray-600'}`}>
+            <div className={`relative bg-white border transition-colors duration-300 rounded-xl shadow-lg overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-blue-500 shadow-blue-500/20' : 'border-gray-300 hover:border-gray-400'}`}>
                 
                 {/* Input Area */}
                 <div className="flex items-end p-2">
@@ -363,7 +363,7 @@ export default function App() {
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={isAutoRunning ? "Vibe Mode Active: Monitoring execution..." : "Describe your ML task (e.g., 'Train a BERT model for sentiment analysis on IMDB')..."}
-                        className="w-full bg-transparent text-gray-200 placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
+                        className="w-full bg-transparent text-black placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
                         rows={1}
                         style={{ minHeight: '50px' }}
                         disabled={isGenerating || isAutoRunning}
@@ -374,8 +374,8 @@ export default function App() {
                         disabled={!prompt.trim() || isGenerating || isAutoRunning}
                         className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
                             prompt.trim() && !isGenerating && !isAutoRunning
-                            ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md' 
-                            : 'bg-notebook-cellBorder/30 text-gray-500 cursor-not-allowed'
+                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' 
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         }`}
                     >
                         {isGenerating ? (
@@ -388,8 +388,8 @@ export default function App() {
                 
                 {/* Loading Progress Bar */}
                 {(isGenerating || isAutoRunning) && (
-                    <div className="h-1 w-full bg-[#131313] overflow-hidden">
-                        <div className={`h-full ${isGenerating ? 'bg-indigo-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
+                    <div className="h-1 w-full bg-gray-100 overflow-hidden">
+                        <div className={`h-full ${isGenerating ? 'bg-blue-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
                     </div>
                 )}
             </div>

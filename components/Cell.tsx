@@ -47,24 +47,24 @@ export const Cell: React.FC<CellProps> = ({
 
   // Determine container styles based on status
   const getContainerStyles = () => {
-      const base = "group relative flex flex-col mb-4 p-2 rounded-lg border-2 transition-all duration-300";
+      const base = "group relative flex flex-col mb-4 p-2 rounded border border-transparent transition-all duration-300";
       
       if (cell.status === 'running') {
-          return `${base} border-indigo-500/60 bg-[#161618] shadow-[0_0_15px_rgba(99,102,241,0.1)]`;
+          return `${base} border-blue-400 bg-white shadow-sm`;
       }
       if (cell.status === 'fixing') {
-          return `${base} border-purple-500/60 bg-[#1a1520] shadow-[0_0_15px_rgba(168,85,247,0.1)]`;
+          return `${base} border-purple-400 bg-purple-50 shadow-sm`;
       }
       if (cell.status === 'error') {
-          return `${base} border-red-500/40 bg-[#1a1212]`;
+          return `${base} border-red-400 bg-red-50`;
       }
       if (cell.status === 'success') {
-          return `${base} border-emerald-500/30 bg-[#131313]`;
+          return `${base} border-green-400 bg-white`;
       }
       if (isActive) {
-          return `${base} border-gray-600 bg-[#1e1e1e] shadow-md`;
+          return `${base} border-blue-500 bg-white shadow-[0_0_8px_rgba(0,0,0,0.1)]`;
       }
-      return `${base} border-transparent hover:border-notebook-cellBorder hover:bg-[#161616]`;
+      return `${base} hover:border-gray-300 hover:bg-gray-50 bg-white`;
   };
 
   return (
@@ -112,8 +112,8 @@ export const Cell: React.FC<CellProps> = ({
 
             {/* Execution Order Number */}
             {cell.type === 'code' && (
-                <span className="text-[10px] font-mono text-notebook-textMuted mt-1 opacity-50 select-none">
-                    {cell.executionCount ? `[${cell.executionCount}]` : ' '}
+                <span className="text-xs font-mono text-blue-800 mt-1 select-none whitespace-nowrap">
+                    In [{cell.executionCount || ' '}]:
                 </span>
             )}
         </div>
@@ -124,7 +124,7 @@ export const Cell: React.FC<CellProps> = ({
             {/* Cell Content */}
             {cell.type === 'markdown' && showPreview && cell.content.trim() !== '' ? (
                  <div 
-                    className="prose prose-sm prose-invert max-w-none p-4 cursor-text border border-transparent hover:bg-[#252526] rounded-md transition-colors"
+                    className="prose prose-sm max-w-none p-4 cursor-text border border-transparent hover:bg-gray-50 rounded-md transition-colors text-black"
                     onDoubleClick={handleDoubleClickMarkdown}
                  >
                     <ReactMarkdown>{cell.content}</ReactMarkdown>
@@ -152,35 +152,35 @@ export const Cell: React.FC<CellProps> = ({
       </div>
 
       {/* Floating Action Menu (Visible on hover or active) */}
-      <div className={`absolute -top-3 right-4 flex items-center gap-1 bg-[#252526] shadow-xl border border-notebook-cellBorder rounded-lg px-2 py-1 transition-all duration-200 z-10 ${isActive || isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+      <div className={`absolute -top-3 right-4 flex items-center gap-1 bg-white shadow-[0_0_10px_rgba(0,0,0,0.1)] border border-gray-300 rounded px-2 py-1 transition-all duration-200 z-10 ${isActive || isHovered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
         
-        <button onClick={() => onMoveUp(cell.id)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded" title="Move Up">
+        <button onClick={() => onMoveUp(cell.id)} className="p-1.5 text-gray-500 hover:text-black hover:bg-gray-100 rounded" title="Move Up">
             <ArrowUp size={14} />
         </button>
-        <button onClick={() => onMoveDown(cell.id)} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded" title="Move Down">
+        <button onClick={() => onMoveDown(cell.id)} className="p-1.5 text-gray-500 hover:text-black hover:bg-gray-100 rounded" title="Move Down">
             <ArrowDown size={14} />
         </button>
         
-        <div className="w-px h-3 bg-gray-600 mx-1" />
+        <div className="w-px h-3 bg-gray-300 mx-1" />
 
         <button 
             onClick={() => onTypeChange(cell.id, 'code')} 
-            className={`p-1.5 rounded hover:bg-white/10 ${cell.type === 'code' ? 'text-blue-400 font-bold' : 'text-gray-400'}`}
+            className={`p-1.5 rounded hover:bg-gray-100 ${cell.type === 'code' ? 'text-blue-600 font-bold' : 'text-gray-500'}`}
             title="Convert to Code"
         >
             <Code2 size={14} />
         </button>
         <button 
             onClick={() => onTypeChange(cell.id, 'markdown')} 
-            className={`p-1.5 rounded hover:bg-white/10 ${cell.type === 'markdown' ? 'text-blue-400 font-bold' : 'text-gray-400'}`}
+            className={`p-1.5 rounded hover:bg-gray-100 ${cell.type === 'markdown' ? 'text-blue-600 font-bold' : 'text-gray-500'}`}
             title="Convert to Markdown"
         >
             <Type size={14} />
         </button>
 
-        <div className="w-px h-3 bg-gray-600 mx-1" />
+        <div className="w-px h-3 bg-gray-300 mx-1" />
 
-        <button onClick={() => onDelete(cell.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-900/30 rounded" title="Delete Cell">
+        <button onClick={() => onDelete(cell.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded" title="Delete Cell">
             <Trash2 size={14} />
         </button>
       </div>

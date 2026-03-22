@@ -4,88 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VibeML Studio</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              notebook: {
-                bg: '#131313',        // Main background (Colab dark)
-                sidebar: '#1e1e1e',   // Header/Sidebar (slightly lighter)
-                cell: '#28292a',      // Code cell background
-                cellBorder: '#3e4042',// Borders
-                text: '#e8eaed',      // Main text
-                textMuted: '#9aa0a6', // Muted text
-                accent: '#8ab4f8',    // Blue accent
-              }
-            },
-            animation: {
-              fadeIn: 'fadeIn 0.2s ease-in-out',
-              'progress-indeterminate': 'progress 2s infinite linear',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              progress: {
-                '0%': { transform: 'translateX(-100%)' },
-                '100%': { transform: 'translateX(100%)' }
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      body {
-        background-color: #131313;
-        color: #e8eaed;
-      }
-      /* Custom scrollbar for a cleaner look */
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #131313;
-      }
-      ::-webkit-scrollbar-corner {
-        background: #131313;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #3e4042;
-        border-radius: 5px;
-        border: 2px solid #131313;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #5f6368;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.32.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react-syntax-highlighter/": "https://aistudiocdn.com/react-syntax-highlighter@^16.1.0/",
-    "react-syntax-highlighter": "https://aistudiocdn.com/react-syntax-highlighter@^16.1.0",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0"
-  }
-}
-</script>
 </head>
   <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

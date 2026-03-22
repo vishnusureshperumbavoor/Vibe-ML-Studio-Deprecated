@@ -36,12 +36,12 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
   };
 
   const bgClass = language === 'python' 
-    ? 'bg-notebook-cell border-notebook-cellBorder focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/50' 
-    : 'bg-transparent border-transparent hover:border-notebook-cellBorder focus-within:border-notebook-cellBorder';
+    ? 'bg-[#f7f7f7] border-[#e0e0e0] focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400' 
+    : 'bg-transparent border-transparent hover:border-gray-300 focus-within:border-gray-300';
 
   const textClass = language === 'python'
-    ? 'text-gray-200'
-    : 'text-notebook-text';
+    ? 'text-black'
+    : 'text-black';
 
   return (
     <div className={`relative w-full rounded-md border transition-all duration-200 ${bgClass}`}>
@@ -53,7 +53,7 @@ export const EditorArea: React.FC<EditorAreaProps> = ({
         placeholder={placeholder}
         readOnly={readOnly}
         spellCheck={false}
-        className={`w-full bg-transparent resize-none p-4 outline-none font-mono text-sm leading-6 ${textClass} placeholder-gray-600`}
+        className={`w-full bg-transparent resize-none p-4 outline-none font-mono text-sm leading-6 ${textClass} placeholder-gray-400`}
         style={{ minHeight: language === 'python' ? '80px' : '40px' }}
       />
       {language === 'python' && !readOnly && (
