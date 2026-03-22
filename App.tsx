@@ -232,14 +232,17 @@ export default function App() {
             }, 500);
         }
 
-    } else if (result.error) {
-         setCells(prev => [...prev, {
-            id: uuidv4(),
-            type: 'markdown',
-            content: `**Error generating plan:** ${result.error}`,
-            status: 'error'
-        }]);
-        setIsGenerating(false);
+    } else {
+         // Handle empty or error cases
+         if (result.error) {
+             setCells(prev => [...prev, {
+                id: uuidv4(),
+                type: 'markdown',
+                content: `**Error generating plan:** ${result.error}`,
+                status: 'error'
+            }]);
+         }
+         setIsGenerating(false);
     }
   };
 

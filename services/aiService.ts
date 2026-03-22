@@ -79,42 +79,63 @@ RECOVERY RULES:
 
 export const generateNotebookStructure = async (prompt: string, mode: ExecutionMode = 'agent'): Promise<NotebookResponse> => {
     try {
-        const text = await callKimi([
-            { role: 'system', content: `
-You are an expert Machine Learning Engineer and Autonomous Agent Architect.
-Your goal is to transform a "vibe" into a high-quality Jupyter notebook or request clarification if the input is too ambiguous.
+        const systemPrompt = `
+You are an expert Machine Learning Engineer. 
+Your task is to transform a user request into a Jupyter Notebook structure.
 
 CURRENT MODE: ${mode.toUpperCase()}
-- If Mode is 'AGENT': Generate a full executable notebook with code and markdown.
-- If Mode is 'PLAN': Generate a high-level technical strategy and architecture plan (Markdown ONLY). Focus on requirements, data flow, and training strategy. Do not generate full code bodies, just a detailed architectural document.
 
-AMBIGUITY CHECK (AGENTIC CLARIFICATION LOOP):
-- If the prompt is critically vague, return { "clarification": "..." }.
+INSTRUCTIONS FOR AGENT MODE:
+- Generate 4-6 functional cells (Markdown + Python Code).
+- The first code cell MUST include any necessary '!pip install' commands.
+- Python cells MUST contain actual implementation logic (data loading, model def, plotting), not just placeholders.
+- Code must be robust and ready to run.
 
-KNOWLEDGE SKILLS & CONSTRAINTS:
-1. AUTONOMOUS DEPENDENCY MANAGEMENT: Use '!pip install <package_name>' at the top of the FIRST code cell.
-2. HEALTHCARE RULES: Follow HIPAA privacy rules. No real PHI. Use de-identified data.
-3. MEDICAL EXPERTISE: You are aware of specialized agents (Radiology Scientist) and commands (@segmentation) available in the system. Use MONAI for 3D tasks.
+INSTRUCTIONS FOR PLAN MODE:
+- Generate 1-2 detailed Markdown cells ONLY.
+- Focus on technical architecture, data strategy, and model requirements.
+- DO NOT generate code cells in Plan mode.
 
-Guidelines:
-1. Return a RAW JSON object.
-2. If Mode is 'PLAN', provide 1-2 detailed markdown cells with the architecture.
-3. If Mode is 'AGENT', provide 4-6 functional code/markdown cells.
-4. DO NOT use markdown code blocks in the JSON.
-            `},
-            { role: 'user', content: `Task: "${prompt}"` }
+AMBIGUITY CHECK:
+- If the prompt is too vague (e.g. "Brain"), return a JSON with a "clarification" field instead of cells.
+
+KNOWLEDGE SKILLS:
+1. MEDICAL: Use MONAI/Nibabel for 3D tasks. Follow HIPAA (no real PHI).
+2. PLATFORMS: Aware of Kaggle, Roboflow, HuggingFace integration.
+3. COMMANDS: Can use macros like @segmentation to trigger MONAI templates.
+
+Output Format:
+{
+  "cells": [
+    { "type": "markdown", "content": "## Section Title\nDetailed explanation..." },
+    { "type": "code", "content": "!pip install ...\nimport ..." }
+  ]
+}
+OR
+{
+  "clarification": "I need to know which dataset you want to use for ..."
+}
+
+STRICT RULE: Return ONLY raw JSON. No markdown backticks. No conversational filler.
+`;
+
+        const text = await callKimi([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `User Prompt: "${prompt}"` }
         ]);
         
         try {
-            const startObj = text.indexOf('{');
-            const endObj = text.lastIndexOf('}');
+            let cleanResponse = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            const startObj = cleanResponse.indexOf('{');
+            const endObj = cleanResponse.lastIndexOf('}');
             
             if (startObj === -1 || endObj === -1) {
-                if (!text.includes('{')) return { cells: [], clarification: text };
+                if (!cleanResponse.includes('{')) return { cells: [], clarification: cleanResponse };
                 throw new Error("No JSON response found.");
             }
 
-            const cleanText = text.substring(startObj, endObj + 1);
+            const cleanText = cleanResponse.substring(startObj, endObj + 1);
             const data = JSON.parse(cleanText);
             
             if (data.clarification) return { cells: [], clarification: data.clarification };
