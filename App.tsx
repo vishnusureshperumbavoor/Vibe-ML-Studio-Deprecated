@@ -6,14 +6,7 @@ import { Button } from './components/Button';
 import { CellData, CellType } from './types';
 import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/aiService';
 
-const INITIAL_CELLS: CellData[] = [
-  {
-    id: '1',
-    type: 'markdown',
-    content: '# VibeML Studio\n\nWelcome to your autonomous AI machine learning workspace.\n\nDescribe your task below (e.g., *"Fine-tune a ResNet on CIFAR-10"*) and I will build, run, and debug the entire workflow for you.',
-    status: 'idle',
-  }
-];
+const INITIAL_CELLS: CellData[] = [];
 
 export default function App() {
   const [cells, setCells] = useState<CellData[]>(INITIAL_CELLS);

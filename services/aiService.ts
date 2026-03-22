@@ -92,28 +92,45 @@ export const generateNotebookStructure = async (prompt: string): Promise<{ cells
 You are an expert Machine Learning Engineer and Data Scientist.
 Your goal is to break down a complex ML task into a logical sequence of Jupyter notebook cells.
 
+CORE RULE: AUTONOMOUS DEPENDENCY MANAGEMENT
+If your code requires ANY third-party libraries not in the standard library (e.g., xgboost, librosa, transformers, torch, monai, roboflow, kaggle), you MUST prepend a line at the very top of the FIRST code cell using the following syntax:
+!pip install <package_name>
+Example: !pip install xgboost scikit-image
+
+KNOWLEDGE SKILLS AVAILABLE:
+- Use 'roboflow' SDK for computer vision datasets.
+- Use 'datasets' and 'transformers' for HuggingFace data.
+- Use 'kaggle' API for tabular data (inject KAGGLE_USERNAME/KAGGLE_KEY from env).
+- Use 'monai' and 'DecathlonDataset' for 3D medical images.
+
 Guidelines:
 1. Use Markdown cells to explain the steps.
-2. Use Python Code cells for implementation (imports, data loading, model definition, training, evaluation).
-3. The code should be realistic, using modern libraries (PyTorch, Transformers, Scikit-learn, Pandas).
-4. Return the response strictly as a RAW JSON array of objects without markdown backticks.
+2. Use Python Code cells for implementation.
+3. Return the response strictly as a RAW JSON array of objects without markdown backticks.
 
 Output Format (JSON):
 [
     { "type": "markdown", "content": "## Step 1: Import Libraries..." },
-    { "type": "code", "content": "import torch\nimport pandas as pd" }
+    { "type": "code", "content": "!pip install xgboost\nimport xgboost as xgb" }
 ]
             `},
             { role: 'user', content: `Create a comprehensive Jupyter notebook for the following task: "${prompt}"` }
         ]);
         
         try {
-            // Clean up backticks if kimi wrapped it in ```json ... ```
-            const cleanText = text.replace(/^\`\`\`json\n?/, '').replace(/\n?\`\`\`$/, '').trim();
+            // Robust JSON extraction: Find the first '[' and last ']' to ignore conversational filler
+            const startBracket = text.indexOf('[');
+            const endBracket = text.lastIndexOf(']');
+            
+            if (startBracket === -1 || endBracket === -1) {
+                throw new Error("No JSON array found in response.");
+            }
+
+            const cleanText = text.substring(startBracket, endBracket + 1);
             const cells = JSON.parse(cleanText);
             return { cells };
         } catch (parseError: any) {
-            return { cells: [], error: "Kimi generated invalid JSON format: " + text };
+            return { cells: [], error: "Kimi generated invalid format. Raw response: " + text };
         }
     } catch (error: any) {
         console.error("Kimi Generation Error:", error);
