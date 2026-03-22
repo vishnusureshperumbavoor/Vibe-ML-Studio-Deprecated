@@ -15,13 +15,13 @@ export default {
       },
       colors: {
         notebook: {
-          bg: '#ffffff',        // Jupyter white background
-          sidebar: '#f5f5f5',   // Top header
-          cell: '#f7f7f7',      // Code background
-          cellBorder: '#cfcfcf',// Grey borders
-          text: '#000000',      // Black text
-          textMuted: '#666666', // Grey text
-          accent: '#1976d2',    // Blue accent
+          bg: '#0B090F',        // Very dark purple-black
+          sidebar: '#140F1D',   // Dark purple sidebar
+          cell: '#1D152A',      // Slightly lighter purple cell
+          cellBorder: '#352554',// Purple border
+          text: '#E2D8F0',      // Light purple/white text
+          textMuted: '#9480B3', // Muted purple text
+          accent: '#A855F7',    // Vibrant purple
         }
       },
       animation: {

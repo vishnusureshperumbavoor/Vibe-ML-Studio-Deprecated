@@ -27,8 +27,8 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) 
 
       {/* Error Output */}
       {status === 'error' || (status === 'fixing' && output) ? (
-         <div className="bg-red-50 border-l-4 border-red-500 p-3 text-red-800 font-mono text-xs md:text-sm whitespace-pre-wrap overflow-x-auto rounded-r-sm">
-            <div className="flex items-center gap-2 mb-1 text-red-600 font-bold uppercase tracking-wider text-[10px]">
+         <div className="bg-red-900/20 border-l-2 border-red-500 p-3 text-red-200 font-mono text-xs md:text-sm whitespace-pre-wrap overflow-x-auto rounded-r-sm">
+            <div className="flex items-center gap-2 mb-1 text-red-400 font-bold uppercase tracking-wider text-[10px]">
                 <AlertCircle size={12} />
                 <span>Traceback</span>
             </div>
@@ -36,8 +36,8 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) 
          </div>
       ) : output ? (
         // Standard Output
-        <div className="pt-2 border-t border-notebook-cellBorder/50 mt-2">
-            <div className="font-mono text-sm text-gray-800 whitespace-pre-wrap overflow-x-auto max-h-96 custom-scrollbar px-2">
+        <div className="pt-2 border-t border-[#352554]/50 mt-2">
+            <div className="font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto max-h-96 custom-scrollbar px-2 opacity-90">
                 {output}
             </div>
         </div>

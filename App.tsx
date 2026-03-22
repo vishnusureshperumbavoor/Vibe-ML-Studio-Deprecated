@@ -256,17 +256,17 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-notebook-bg text-notebook-text font-sans selection:bg-blue-200">
+    <div className="flex flex-col h-screen bg-[#0B090F] text-[#E2D8F0] font-sans selection:bg-purple-500/30">
       
       {/* Top Header - Minimalist */}
-      <header className="flex-none h-14 border-b border-notebook-cellBorder bg-notebook-sidebar flex items-center px-4 justify-between z-10 sticky top-0">
+      <header className="flex-none h-14 border-b border-[#352554] bg-[#140F1D] flex items-center px-4 justify-between z-10 sticky top-0">
         <div className="flex items-center gap-3">
             <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-white shadow-lg transition-all duration-500 ${isAutoRunning ? 'bg-gradient-to-br from-green-400 to-emerald-600 shadow-emerald-900/20' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-purple-900/20'}`}>
                 {isAutoRunning ? <Zap size={16} className="animate-pulse" /> : <Sparkles size={16} />}
             </div>
             <div>
-                <h1 className="text-sm font-semibold text-notebook-text tracking-wide">VibeML Studio</h1>
-                <span className="text-xs text-notebook-textMuted flex items-center gap-2">
+                <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">VibeML Studio</h1>
+                <span className="text-xs text-[#9480B3] flex items-center gap-2">
                     {isAutoRunning ? (
                         <span className="text-emerald-400 flex items-center gap-1">
                             <span className="relative flex h-2 w-2">
@@ -284,7 +284,7 @@ export default function App() {
              <Button size="sm" variant="ghost" onClick={clearAll} title="Clear Notebook" disabled={isAutoRunning}>
                 <Trash2 size={16} />
              </Button>
-             <div className="h-4 w-px bg-notebook-cellBorder mx-2"></div>
+             <div className="h-4 w-px bg-[#352554] mx-2"></div>
              {isAutoRunning ? (
                  <Button size="sm" variant="danger" onClick={handleStop} className="border-red-900/50 bg-red-900/20 text-red-400 hover:bg-red-900/40">
                     <StopCircle size={14} className="mr-2" />
@@ -307,8 +307,8 @@ export default function App() {
             <div className="max-w-4xl mx-auto min-h-[50vh]">
                 
                 {cells.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-64 text-notebook-textMuted">
-                        <Sparkles size={48} className="mb-4 text-notebook-cellBorder" />
+                    <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
+                        <Sparkles size={48} className="mb-4 text-[#352554]" />
                         <p>Ready to vibe. Type a prompt below.</p>
                     </div>
                 )}
@@ -334,7 +334,7 @@ export default function App() {
                 {/* Manual Add Buttons (Ghosted) */}
                 {!isAutoRunning && (
                     <div className="group flex justify-center items-center gap-4 py-8 opacity-40 hover:opacity-100 transition-opacity">
-                        <div className="h-px bg-notebook-cellBorder flex-grow"></div>
+                        <div className="h-px bg-[#352554] flex-grow"></div>
                         <div className="flex gap-2">
                             <Button size="sm" variant="ghost" onClick={() => addCell('code')}>
                                 <Plus size={14} className="mr-1" /> Code
@@ -343,7 +343,7 @@ export default function App() {
                                 <Plus size={14} className="mr-1" /> Text
                             </Button>
                         </div>
-                        <div className="h-px bg-notebook-cellBorder flex-grow"></div>
+                        <div className="h-px bg-[#352554] flex-grow"></div>
                     </div>
                 )}
 
@@ -352,9 +352,9 @@ export default function App() {
       </div>
 
       {/* Bottom Prompt Bar - Floating */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-notebook-bg via-notebook-bg to-transparent z-20 pointer-events-none">
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
          <div className="max-w-3xl mx-auto pointer-events-auto">
-            <div className={`relative bg-white border transition-colors duration-300 rounded-xl shadow-lg overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-blue-500 shadow-blue-500/20' : 'border-gray-300 hover:border-gray-400'}`}>
+            <div className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-purple-500 shadow-purple-500/20' : 'border-[#352554] hover:border-gray-500'}`}>
                 
                 {/* Input Area */}
                 <div className="flex items-end p-2">
@@ -363,7 +363,7 @@ export default function App() {
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={isAutoRunning ? "Vibe Mode Active: Monitoring execution..." : "Describe your ML task (e.g., 'Train a BERT model for sentiment analysis on IMDB')..."}
-                        className="w-full bg-transparent text-black placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
+                        className="w-full bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
                         rows={1}
                         style={{ minHeight: '50px' }}
                         disabled={isGenerating || isAutoRunning}
@@ -374,8 +374,8 @@ export default function App() {
                         disabled={!prompt.trim() || isGenerating || isAutoRunning}
                         className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
                             prompt.trim() && !isGenerating && !isAutoRunning
-                            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm' 
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            ? 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm' 
+                            : 'bg-[#1a1a1a] text-gray-500 cursor-not-allowed'
                         }`}
                     >
                         {isGenerating ? (
@@ -388,13 +388,13 @@ export default function App() {
                 
                 {/* Loading Progress Bar */}
                 {(isGenerating || isAutoRunning) && (
-                    <div className="h-1 w-full bg-gray-100 overflow-hidden">
-                        <div className={`h-full ${isGenerating ? 'bg-blue-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
+                    <div className="h-1 w-full bg-[#1a1a1a] overflow-hidden">
+                        <div className={`h-full ${isGenerating ? 'bg-purple-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
                     </div>
                 )}
             </div>
             
-            <div className="text-center mt-2 text-xs text-notebook-textMuted opacity-70">
+            <div className="text-center mt-2 text-xs text-[#9480B3] opacity-70">
                 Gemini 2.5 Flash • VibeML Auto-Pilot
             </div>
          </div>
