@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Trash2, ArrowUp, ArrowDown, Type, Code2, Wand2, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import { Play, Trash2, ArrowUp, ArrowDown, Type, Code2, Wand2, CheckCircle2, Loader2, XCircle, Zap } from 'lucide-react';
 import { CellData } from '../types';
 import { EditorArea } from './EditorArea';
 import { CellOutput } from './CellOutput';
@@ -52,7 +52,7 @@ export const Cell: React.FC<CellProps> = ({
       if (cell.status === 'running') {
           return `${base} border-purple-500/60 bg-[#1D152A] shadow-sm`;
       }
-      if (cell.status === 'fixing') {
+      if (cell.status === 'fixing' || cell.status === 'recovering') {
           return `${base} border-fuchsia-500/60 bg-fuchsia-900/10 shadow-sm`;
       }
       if (cell.status === 'error') {
@@ -78,43 +78,52 @@ export const Cell: React.FC<CellProps> = ({
       {/* Sidebar Controls (Gutter) */}
       <div className="flex flex-row w-full gap-3">
         
-        {/* Play/Status Button Area */}
+        {/* Play/Status Button Area (Only for Code) */}
         <div className="flex-none w-8 pt-1.5 flex flex-col items-center">
-            <button 
-                onClick={(e) => { e.stopPropagation(); handleRun(); }}
-                className={`p-1.5 rounded-md transition-all duration-200 flex items-center justify-center relative group/btn
-                    ${cell.status === 'running' || cell.status === 'fixing' ? 'cursor-not-allowed opacity-100' : 'hover:bg-[#352554] cursor-pointer'}
-                `}
-                title={cell.status === 'success' ? "Run again" : "Run cell"}
-                disabled={cell.status === 'running' || cell.status === 'fixing'}
-            >
-                {/* Status Icons */}
-                {cell.status === 'running' ? (
-                   <Loader2 size={18} className="animate-spin text-indigo-400" />
-                ) : cell.status === 'fixing' ? (
-                    <Wand2 size={18} className="animate-pulse text-purple-400" />
-                ) : cell.status === 'success' ? (
-                    <>
-                        <CheckCircle2 size={18} className="text-emerald-500 transition-opacity absolute duration-200 group-hover/btn:opacity-0" />
-                        <Play size={18} className="text-[#9480B3] opacity-0 group-hover/btn:opacity-100 transition-opacity absolute" fill="currentColor" />
-                        <div className="w-4 h-4" /> {/* Spacer to keep layout size */}
-                    </>
-                ) : cell.status === 'error' ? (
-                    <>
-                        <XCircle size={18} className="text-red-500 transition-opacity absolute duration-200 group-hover/btn:opacity-0" />
-                        <Play size={18} className="text-[#9480B3] opacity-0 group-hover/btn:opacity-100 transition-opacity absolute" fill="currentColor" />
-                        <div className="w-4 h-4" />
-                    </>
-                ) : (
-                   <Play size={18} className="text-[#9480B3] hover:text-white transition-colors" fill={cell.type === 'code' ? "currentColor" : "none"} />
-                )}
-            </button>
+            {cell.type === 'code' ? (
+                <>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleRun(); }}
+                        className={`p-1.5 rounded-md transition-all duration-200 flex items-center justify-center relative group/btn
+                            ${cell.status === 'running' || cell.status === 'fixing' || cell.status === 'recovering' ? 'cursor-not-allowed opacity-100' : 'hover:bg-[#352554] cursor-pointer'}
+                        `}
+                        title={cell.status === 'success' ? "Run again" : "Run cell"}
+                        disabled={cell.status === 'running' || cell.status === 'fixing' || cell.status === 'recovering'}
+                    >
+                        {/* Status Icons */}
+                        {cell.status === 'running' ? (
+                           <Loader2 size={18} className="animate-spin text-indigo-400" />
+                        ) : cell.status === 'fixing' || cell.status === 'recovering' ? (
+                            <div className="relative">
+                                <Wand2 size={18} className="animate-pulse text-purple-400" />
+                                {cell.status === 'recovering' && (
+                                    <Zap size={10} className="absolute -top-1 -right-1 text-yellow-400 animate-bounce" />
+                                )}
+                            </div>
+                        ) : cell.status === 'success' ? (
+                            <>
+                                <CheckCircle2 size={18} className="text-emerald-500 transition-opacity absolute duration-200 group-hover/btn:opacity-0" />
+                                <Play size={18} className="text-[#9480B3] opacity-0 group-hover/btn:opacity-100 transition-opacity absolute" fill="currentColor" />
+                                <div className="w-4 h-4" /> 
+                            </>
+                        ) : cell.status === 'error' ? (
+                            <>
+                                <XCircle size={18} className="text-red-500 transition-opacity absolute duration-200 group-hover/btn:opacity-0" />
+                                <Play size={18} className="text-[#9480B3] opacity-0 group-hover/btn:opacity-100 transition-opacity absolute" fill="currentColor" />
+                                <div className="w-4 h-4" />
+                            </>
+                        ) : (
+                           <Play size={18} className="text-[#9480B3] hover:text-white transition-colors" fill="currentColor" />
+                        )}
+                    </button>
 
-            {/* Execution Order Number */}
-            {cell.type === 'code' && (
-                <span className="text-xs font-mono text-purple-400 mt-1 select-none whitespace-nowrap">
-                    In [{cell.executionCount || ' '}]:
-                </span>
+                    {/* Execution Order Number */}
+                    <span className="text-xs font-mono text-purple-400 mt-1 select-none whitespace-nowrap">
+                        In [{cell.executionCount || ' '}]:
+                    </span>
+                </>
+            ) : (
+                <div className="w-full h-full" />
             )}
         </div>
 

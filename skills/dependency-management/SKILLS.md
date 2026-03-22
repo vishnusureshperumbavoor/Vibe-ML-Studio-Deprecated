@@ -20,4 +20,5 @@ from skimage.metrics import structural_similarity as ssim
 # Implementation...
 ```
 
-4. **Multiple Packages**: You can string multiple packages together to save execution cycles (e.g. `!pip install transformers accelerate bitsandbytes`). Do not run `!pip install` inside functions or `if __name__ == "__main__"`, keep them strictly at the top of the generated code payload.
+4. **PROHIBITION**: Never use `import subprocess` or `os.system` or `sys.executable` to run `pip` commands inside the actual script body. The script Body must only contain Machine Learning logic. Installations MUST be handled via the `!pip install` line at the very top.
+5. **Multiple Packages**: You can string multiple packages together (e.g. `!pip install transformers accelerate bitsandbytes`).

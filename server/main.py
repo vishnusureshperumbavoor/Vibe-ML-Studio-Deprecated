@@ -23,29 +23,35 @@ class ExecuteRequest(BaseModel):
 
 @app.post("/execute")
 def execute_code(req: ExecuteRequest):
-    code_lines = req.code.split('\n')
+    code_lines = req.code.splitlines()
     python_code_lines = []
     
     # 1. Intercept "Magic Pip" Commands
     for line in code_lines:
-        stripped = line.strip()
-        if stripped.startswith("!pip install ") or stripped.startswith("%pip install "):
-            # Extract just the package names
-            packages = stripped.replace("!pip install ", "").replace("%pip install ", "").split()
-            if packages:
-                try:
-                    # Run the pip installation synchronously using the exact venv python executable
-                    print(f"Intercepted Magic Pip. Installing: {packages}")
-                    subprocess.run(
-                        [sys.executable, "-m", "pip", "install"] + packages, 
-                        check=True, 
-                        capture_output=True, 
-                        text=True
-                    )
-                except subprocess.CalledProcessError as e:
-                    return {"output": "", "is_error": True, "raw_error": f"Failed to run auto-install: {e.stderr}"}
-        else:
-            python_code_lines.append(line)
+        # Strip all whitespace AND invisible characters like BOM (Byte Order Mark)
+        stripped = line.strip().lstrip('\ufeff')
+        
+        # If it looks like a notebook magic command
+        if stripped.startswith("!") or stripped.startswith("%"):
+            # If it's specifically a pip install command
+            if "pip install" in stripped:
+                packages = stripped.replace("!pip install", "").replace("%pip install", "").strip().split()
+                if packages:
+                    try:
+                        print(f"DEBUG: Intercepted Magic Pip. Installing: {packages}")
+                        subprocess.run(
+                            [sys.executable, "-m", "pip", "install"] + packages, 
+                            check=True, 
+                            capture_output=True, 
+                            text=True
+                        )
+                    except subprocess.CalledProcessError as e:
+                        return {"output": e.stdout, "is_error": True, "raw_error": f"Failed to run auto-install: {e.stderr}"}
+            
+            # ALWAYS SKIP magic lines for the final .py file to avoid SyntaxErrors
+            continue 
+            
+        python_code_lines.append(line)
             
     clean_code = '\n'.join(python_code_lines)
 

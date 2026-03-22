@@ -146,12 +146,15 @@ export default function App() {
             if (result.success) {
                 success = true;
             } else {
-                // Error encountered! Engage Auto-Fix.
+                // Agentic Auto-Recovery Detection
+                const isMissingModule = result.output.includes("ModuleNotFoundError") || result.output.includes("ImportError");
+                
                 if (attempts < maxAttempts) {
-                    // Update Status to Fixing
-                    setCells(prev => prev.map(c => c.id === cell.id ? { ...c, status: 'fixing' } : c));
+                    // Update Status to Recovering/Fixing
+                    const statusType = isMissingModule ? 'recovering' : 'fixing';
+                    setCells(prev => prev.map(c => c.id === cell.id ? { ...c, status: statusType as any } : c));
                     
-                    // Get the fix
+                    // Get the fix from the Agent
                     const fixedCode = await fixCodeError(cellsRef.current[i].content, result.output);
                     
                     // Update cell content with fix
@@ -190,20 +193,8 @@ export default function App() {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
     
-    // Add a temporary "Thinking" markdown cell
-    const thinkingId = uuidv4();
-    setCells(prev => [...prev, {
-        id: thinkingId,
-        type: 'markdown',
-        content: '_Architecting solution & planning execution flow..._',
-        status: 'idle'
-    }]);
-
     const result = await generateNotebookStructure(prompt);
     
-    // Remove thinking cell
-    setCells(prev => prev.filter(c => c.id !== thinkingId));
-
     if (result.cells && result.cells.length > 0) {
         const newCells: CellData[] = result.cells.map(c => ({
             id: uuidv4(),
@@ -268,7 +259,7 @@ export default function App() {
                             </span>
                             Auto-Pilot Active
                         </span>
-                    ) : 'Vibe Coding is here. Why not Vibe Training'}
+                    ) : 'Vibe Coding is here. Why not Vibe Train?'}
                 </span>
             </div>
         </div>
@@ -302,7 +293,7 @@ export default function App() {
                 {cells.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
                         <Sparkles size={48} className="mb-4 text-[#352554]" />
-                        <p>Ready to vibe. Type a prompt below.</p>
+                        <p>Ready for Vibe Training. Type a prompt below.</p>
                     </div>
                 )}
 
@@ -324,18 +315,8 @@ export default function App() {
 
                 <div ref={bottomRef} className="h-4" />
                 
-                {/* Manual Add Buttons (Ghosted) */}
-                {!isAutoRunning && (
-                    <div className="group flex justify-center items-center gap-4 py-8 opacity-40 hover:opacity-100 transition-opacity">
-                        <div className="h-px bg-[#352554] flex-grow"></div>
-                        <div className="flex gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => addCell('code')}>
-                                <Plus size={14} className="mr-1" /> Code
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => addCell('markdown')}>
-                                <Plus size={14} className="mr-1" /> Text
-                            </Button>
-                        </div>
+                {!isAutoRunning && cells.length > 0 && (
+                    <div className="group flex justify-center items-center py-8 opacity-20 hover:opacity-100 transition-opacity">
                         <div className="h-px bg-[#352554] flex-grow"></div>
                     </div>
                 )}
@@ -385,10 +366,6 @@ export default function App() {
                         <div className={`h-full ${isGenerating ? 'bg-purple-500' : 'bg-emerald-500'} animate-progress-indeterminate`}></div>
                     </div>
                 )}
-            </div>
-            
-            <div className="text-center mt-2 text-xs text-[#9480B3] opacity-70">
-                Gemini 2.5 Flash • VibeML Auto-Pilot
             </div>
          </div>
       </div>

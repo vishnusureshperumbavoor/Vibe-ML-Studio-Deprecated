@@ -1,6 +1,6 @@
 export type CellType = 'code' | 'markdown';
 
-export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'fixing';
+export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'fixing' | 'recovering';
 
 export interface CellData {
   id: string;

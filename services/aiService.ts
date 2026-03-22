@@ -72,8 +72,16 @@ export const simulateCodeExecution = async (code: string): Promise<GeminiRespons
 export const fixCodeError = async (code: string, error: string): Promise<string> => {
     try {
         let fixedCode = await callKimi([
-            { role: 'system', content: "You are an expert Python debugger. Your goal is to fix the provided code so it runs without the specified error. Maintain the original logic as much as possible." },
-            { role: 'user', content: `Original Code:\n${code}\n\nError Traceback:\n${error}\n\nFix the code to resolve the error. Return ONLY the fixed python code. No markdown, no explanations.` }
+            { role: 'system', content: `
+You are an expert Python debugger and autonomous recovery agent. 
+Your goal is to fix the provided code so it runs without the specified error.
+
+RECOVERY RULES:
+1. If the error is a 'ModuleNotFoundError' or 'ImportError', prepend a '!pip install <package>' line at the very top of the code to fix the environment.
+2. Maintain the original logic as much as possible.
+3. Return ONLY the fixed python code (including any !pip commands). No markdown, no explanations.
+            `},
+            { role: 'user', content: `Original Code:\n${code}\n\nError Traceback:\n${error}\n\nFix the code. If a library is missing, add the !pip install line.` }
         ]);
         
         // Clean up markdown if model adds it
@@ -93,25 +101,30 @@ You are an expert Machine Learning Engineer and Data Scientist.
 Your goal is to break down a complex ML task into a logical sequence of Jupyter notebook cells.
 
 CORE RULE: AUTONOMOUS DEPENDENCY MANAGEMENT
-If your code requires ANY third-party libraries not in the standard library (e.g., xgboost, librosa, transformers, torch, monai, roboflow, kaggle), you MUST prepend a line at the very top of the FIRST code cell using the following syntax:
-!pip install <package_name>
-Example: !pip install xgboost scikit-image
+- If your code requires ANY third-party libraries (e.g., xgboost, librosa, transformers, torch), you MUST use ONLY the following syntax at the very top of the FIRST code cell:
+  !pip install <package_name> 
+- PROHIBITED: Never use 'import subprocess', 'os.system', or 'sys.executable' to run pip inside the python code. The backend REQUIRES the '!' magic command to pre-install dependencies into the venv.
 
 KNOWLEDGE SKILLS AVAILABLE:
-- Use 'roboflow' SDK for computer vision datasets.
-- Use 'datasets' and 'transformers' for HuggingFace data.
+- Use 'roboflow' SDK for computer vision.
+- Use 'datasets' and 'transformers' for HuggingFace.
 - Use 'kaggle' API for tabular data (inject KAGGLE_USERNAME/KAGGLE_KEY from env).
 - Use 'monai' and 'DecathlonDataset' for 3D medical images.
 
 Guidelines:
-1. Use Markdown cells to explain the steps.
-2. Use Python Code cells for implementation.
-3. Return the response strictly as a RAW JSON array of objects without markdown backticks.
+1. Use Markdown cells to explain the theory/steps clearly.
+2. Use Python Code cells for the actual implementation. 
+3. DO NOT just write import statements. Each cell must contain the functional logic requested (e.g., loading data, training loops, plotting).
+4. Return the response strictly as a RAW JSON array of objects without markdown backticks.
 
-Output Format (JSON):
+Output Format (JSON Example):
 [
-    { "type": "markdown", "content": "## Step 1: Import Libraries..." },
-    { "type": "code", "content": "!pip install xgboost\nimport xgboost as xgb" }
+    { "type": "markdown", "content": "## Step 1: Import Libraries and Setup" },
+    { "type": "code", "content": "!pip install librosa matplotlib\nimport librosa\nimport matplotlib.pyplot as plt" },
+    { "type": "markdown", "content": "## Step 2: Load Example Audio" },
+    { "type": "code", "content": "import librosa\n# Load example trumpet sound\naudio_path = librosa.example('trumpet')\ny, sr = librosa.load(audio_path)\nprint(f'Loaded {audio_path} with sample rate {sr}')" },
+    { "type": "markdown", "content": "## Step 3: Plot Waveform" },
+    { "type": "code", "content": "plt.figure(figsize=(10, 4))\nlibrosa.display.waveshow(y, sr=sr)\nplt.title('Trumpet Waveform')\nplt.show()" }
 ]
             `},
             { role: 'user', content: `Create a comprehensive Jupyter notebook for the following task: "${prompt}"` }
