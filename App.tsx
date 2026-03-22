@@ -268,17 +268,14 @@ export default function App() {
              <Button size="sm" variant="ghost" onClick={clearAll} title="Clear Notebook" disabled={isAutoRunning}>
                 <Trash2 size={16} />
              </Button>
-             <div className="h-4 w-px bg-[#352554] mx-2"></div>
-             {isAutoRunning ? (
-                 <Button size="sm" variant="danger" onClick={handleStop} className="border-red-900/50 bg-red-900/20 text-red-400 hover:bg-red-900/40">
-                    <StopCircle size={14} className="mr-2" />
-                    Stop Auto-Pilot
-                 </Button>
-             ) : (
-                 <Button size="sm" variant="primary" onClick={() => executeNotebook(0)} className="bg-indigo-600 hover:bg-indigo-700 border-none">
-                    <Play size={14} className="mr-2" />
-                    Run All
-                 </Button>
+             {isAutoRunning && (
+                 <>
+                    <div className="h-4 w-px bg-[#352554] mx-2"></div>
+                    <Button size="sm" variant="danger" onClick={handleStop} className="border-red-900/50 bg-red-900/20 text-red-400 hover:bg-red-900/40">
+                        <StopCircle size={14} className="mr-2" />
+                        Stop Auto-Pilot
+                    </Button>
+                 </>
              )}
         </div>
       </header>
