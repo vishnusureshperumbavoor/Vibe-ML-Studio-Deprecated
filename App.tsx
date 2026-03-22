@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Cell } from './components/Cell';
 import { Button } from './components/Button';
 import { CellData, CellType } from './types';
-import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/geminiService';
+import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/aiService';
 
 const INITIAL_CELLS: CellData[] = [
   {
@@ -275,7 +275,7 @@ export default function App() {
                             </span>
                             Auto-Pilot Active
                         </span>
-                    ) : 'Vibe Coding is here. Why not Vibe Train'}
+                    ) : 'Vibe Coding is here. Why not Vibe Training'}
                 </span>
             </div>
         </div>
