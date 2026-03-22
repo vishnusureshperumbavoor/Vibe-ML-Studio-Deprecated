@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Play, Sparkles, Send, Trash2, StopCircle, Zap } from 'lucide-react';
+import { Plus, Play, Sparkles, Send, Trash2, StopCircle, Zap, Map, Rocket } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { Cell } from './components/Cell';
 import { Button } from './components/Button';
-import { CellData, CellType } from './types';
+import { CellData, CellType, ExecutionMode } from './types';
 import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/aiService';
 
 const INITIAL_CELLS: CellData[] = [];
@@ -16,6 +16,8 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAutoRunning, setIsAutoRunning] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [clarification, setClarification] = useState<string | null>(null);
+  const [mode, setMode] = useState<ExecutionMode>('agent');
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
 
@@ -192,9 +194,17 @@ export default function App() {
   const handleSubmitPrompt = async () => {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
+    setClarification(null); // Clear any previous clarification
     
-    const result = await generateNotebookStructure(prompt);
+    // Pass the mode to the generator
+    const result = await generateNotebookStructure(prompt, mode);
     
+    if (result.clarification) { // Handle clarification
+        setClarification(result.clarification);
+        setIsGenerating(false);
+        return;
+    }
+
     if (result.cells && result.cells.length > 0) {
         const newCells: CellData[] = result.cells.map(c => ({
             id: uuidv4(),
@@ -215,11 +225,12 @@ export default function App() {
         setPrompt('');
         setIsGenerating(false);
 
-        // START AUTO EXECUTION IMMEDIATELY
-        // Allow state to settle briefly then start
-        setTimeout(() => {
-            executeNotebook(previousLength);
-        }, 500);
+        // ONLY START AUTO-PILOT IF IN AGENT MODE
+        if (mode === 'agent') {
+            setTimeout(() => {
+                executeNotebook(previousLength);
+            }, 500);
+        }
 
     } else if (result.error) {
          setCells(prev => [...prev, {
@@ -282,12 +293,37 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-grow flex overflow-hidden relative">
-        
+
         {/* Notebook Area */}
-        <main className="flex-grow overflow-y-auto p-4 md:p-8 scroll-smooth pb-48">
-            <div className="max-w-4xl mx-auto min-h-[50vh]">
-                
-                {cells.length === 0 && (
+        <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8">
+        <div className="max-w-5xl mx-auto space-y-6">
+
+          {/* Clarification Loop UI */}
+          {clarification && (
+              <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="flex items-start gap-4">
+                      <div className="p-2 bg-indigo-500/20 rounded-lg">
+                          <Sparkles className="text-indigo-400" size={20} />
+                      </div>
+                      <div className="flex-1">
+                          <h3 className="text-indigo-300 font-semibold mb-2">Agent Clarification Needed</h3>
+                          <p className="text-[#E2D8F0]/80 text-sm leading-relaxed mb-4">
+                              {clarification}
+                          </p>
+                          <div className="flex gap-3">
+                              <button
+                                onClick={() => { setPrompt(''); setClarification(null); }}
+                                className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                              >
+                                Dismiss
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {cells.length === 0 && !isGenerating && !clarification && (
                     <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
                         <Sparkles size={48} className="mb-4 text-[#352554]" />
                         <p>Ready for Vibe Training. Type a prompt below.</p>
@@ -327,13 +363,38 @@ export default function App() {
          <div className="max-w-3xl mx-auto pointer-events-auto">
             <div className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? 'border-purple-500 shadow-purple-500/20' : 'border-[#352554] hover:border-gray-500'}`}>
                 
-                {/* Input Area */}
-                <div className="flex items-end p-2">
+                {/* Mode Selector and Input Area */}
+                <div className="flex items-end p-2 gap-2">
+                    {/* Mode Toggle Button */}
+                    <button
+                        onClick={() => setMode(prev => prev === 'agent' ? 'plan' : 'agent')}
+                        disabled={isGenerating || isAutoRunning}
+                        className={`mb-2 ml-2 p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-medium border
+                            ${mode === 'agent' 
+                                ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20' 
+                                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'}
+                        `}
+                    >
+                        {mode === 'agent' ? (
+                            <>
+                                <Rocket size={14} />
+                                <span className="hidden sm:inline">Agent</span>
+                            </>
+                        ) : (
+                            <>
+                                <Map size={14} />
+                                <span className="hidden sm:inline">Plan</span>
+                            </>
+                        )}
+                    </button>
+
                     <textarea 
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={isAutoRunning ? "Vibe Mode Active: Monitoring execution..." : "Describe your ML task (e.g., 'Train a BERT model for sentiment analysis on IMDB')..."}
+                        placeholder={mode === 'agent' 
+                            ? "Agent: Describe your task and I'll build and run it..." 
+                            : "Plan: Describe your task to see the architectural strategy..."}
                         className="w-full bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
                         rows={1}
                         style={{ minHeight: '50px' }}
