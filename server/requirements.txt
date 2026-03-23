@@ -9,9 +9,3 @@ pandas>=2.2.0
 scikit-learn>=1.4.0
 matplotlib>=3.8.0
 
-# Core Machine Learning Architectures (Uncomment to install later)
-# torch>=2.2.0
-# torchvision>=0.17.0
-# transformers>=4.38.0
-# datasets>=2.18.0
-# monai>=1.3.0

@@ -29,7 +29,7 @@ async function callKimi(messages: any[], temperature = 0.1) {
 
 export const simulateCodeExecution = async (code: string): Promise<GeminiResponse> => {
   try {
-    const response = await fetch("http://127.0.0.1:8000/execute", {
+    const response = await fetch("http://127.0.0.1:2000/execute", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
