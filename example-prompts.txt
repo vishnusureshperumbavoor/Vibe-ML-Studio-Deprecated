@@ -1,0 +1,2 @@
+"Load the librosa example audio 'trumpet' and plot its waveform using matplotlib."
+

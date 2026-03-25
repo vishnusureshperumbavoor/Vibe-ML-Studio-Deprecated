@@ -1,30 +1,54 @@
 import { NotebookResponse, GeminiResponse, ExecutionMode } from "../types";
 
-// User provided Kimi API Key
-const apiKey = 'sk-93KoByBxOfJdwL9tOIGAIASIf9mNIeU93dyG19DCY2uH48Ol';
+// API Key from environment variables
+const apiKey = import.meta.env.VITE_KIMI_API_KEY;
 const API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 
 async function callKimi(messages: any[], temperature = 0.1) {
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'moonshot-v1-8k',
-      messages: messages,
-      temperature: temperature
-    })
-  });
+  const maxRetries = 4; // Increased retries for Tier 2 handling
+  let attempt = 0;
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error?.message || 'Failed to fetch from Kimi API');
+  while (attempt <= maxRetries) {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'moonshot-v1-32k', // Upgraded to 32k for Tier 2 stability
+          messages: messages,
+          temperature: temperature
+        })
+      });
+
+      // Handle Rate Limiting (429) specifically as suggested by Kimi K2
+      if (response.status === 429) {
+        attempt++;
+        if (attempt > maxRetries) throw new Error("Kimi API Rate limit exceeded. Please wait a moment.");
+        
+        // Exponential backoff: 2s, 4s, 8s... + random jitter
+        const delay = Math.pow(2, attempt) * 1000 + (Math.random() * 500); 
+        console.warn(`[Kimi Tier 2] Rate limited (429). Retrying in ${Math.round(delay)}ms... (Attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+
+    } catch (error: any) {
+      if (attempt >= maxRetries) throw error;
+      attempt++;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
 }
 
 export const simulateCodeExecution = async (code: string): Promise<GeminiResponse> => {
