@@ -263,7 +263,7 @@ export default function App() {
                 {isAutoRunning ? <Zap size={16} className="animate-pulse" /> : <Sparkles size={16} />}
             </div>
             <div>
-                <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">VibeML Studio</h1>
+                <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">VibeML Agents</h1>
                 <span className="text-xs text-[#9480B3] flex items-center gap-2">
                     {isAutoRunning ? (
                         <span className="text-emerald-400 flex items-center gap-1">
@@ -273,7 +273,7 @@ export default function App() {
                             </span>
                             Auto-Pilot Active
                         </span>
-                    ) : 'Vibe Coding is here. Why not Vibe Train?'}
+                    ) : 'Vibe Coding Agents are here. Why not Vibe Training Agents?'}
                 </span>
             </div>
         </div>
@@ -329,7 +329,7 @@ export default function App() {
           {cells.length === 0 && !isGenerating && !clarification && (
                     <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
                         <Sparkles size={48} className="mb-4 text-[#352554]" />
-                        <p>Ready for Vibe Training. Type a prompt below.</p>
+                        <p>Ladies and Gentlemen, you are not ready for this, Vibe Traning Agents. Type a prompt below.</p>
                     </div>
                 )}
 
