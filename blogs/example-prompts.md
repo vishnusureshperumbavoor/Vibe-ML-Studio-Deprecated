@@ -1,3 +1,5 @@
+Explore the Task04_Hippocampus dataset in medical decathlon and show me a few slices
+
 "Load the librosa example audio 'trumpet' and plot its waveform using matplotlib."
 
 "Build an 3D UNet to segment coronary arteries from my DICOM files, benchmark it against the ASOCA leaderboards, and deploy a Gradio dashboard with a slider to view the 3D slices." Agent Action: Trains MONAI model -> Computes Dice Score -> Launches Gradio UI with a slice-by-slice viewer.

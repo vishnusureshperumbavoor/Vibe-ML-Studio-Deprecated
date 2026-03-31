@@ -21,6 +21,7 @@ export default function App() {
   const [clarification, setClarification] = useState<string | null>(null);
   const [mode, setMode] = useState<ExecutionMode>('agent');
   const [thinking, setThinking] = useState<string | null>(null);
+  const [thinkingHistory, setThinkingHistory] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
 
@@ -204,9 +205,13 @@ export default function App() {
     setThinking("Analysing your request and preparing a plan...");
     
     if (mode === 'agent') {
+        setThinkingHistory([]); // Reset history for new session
         const agent = new VibeAgent(
             cellsRef.current,
-            (text) => setThinking(text),
+            (text) => {
+                setThinking(text);
+                setThinkingHistory(prev => [...prev, text]);
+            },
             (updatedCells) => {
                 setCells(updatedCells);
                 cellsRef.current = updatedCells;
@@ -280,7 +285,11 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#0B090F] text-[#E2D8F0] font-sans selection:bg-purple-500/30">
-      <ThinkingView content={thinking} isVisible={!!thinking} />
+      <ThinkingView 
+        content={thinking} 
+        isVisible={!!thinking} 
+        history={thinkingHistory}
+      />
       
       {/* Top Header - Minimalist */}
       <header className="flex-none h-14 border-b border-[#352554] bg-[#140F1D] flex items-center px-4 justify-between z-10 sticky top-0">

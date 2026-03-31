@@ -1,13 +1,25 @@
-import React from 'react';
-import { Brain, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Brain, Sparkles, Copy, Check } from 'lucide-react';
 
 interface ThinkingViewProps {
   content: string | null;
   isVisible: boolean;
+  history?: string[];
 }
 
-export const ThinkingView: React.FC<ThinkingViewProps> = ({ content, isVisible }) => {
+export const ThinkingView: React.FC<ThinkingViewProps> = ({ content, isVisible, history = [] }) => {
+  const [copied, setCopied] = useState(false);
+
   if (!isVisible || !content) return null;
+
+  const handleCopy = () => {
+      const fullHistory = history.length > 0 
+          ? history.join('\n\n---\n\n') 
+          : content;
+      navigator.clipboard.writeText(fullHistory);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="fixed top-20 right-8 w-80 max-h-[60vh] z-50 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -19,11 +31,13 @@ export const ThinkingView: React.FC<ThinkingViewProps> = ({ content, isVisible }
           </div>
           <span className="text-xs font-semibold text-purple-200 tracking-wider uppercase">Agent Reasoning</span>
           <div className="flex-grow"></div>
-          <div className="flex gap-1">
-             <div className="h-1 w-1 rounded-full bg-purple-400 animate-pulse"></div>
-             <div className="h-1 w-1 rounded-full bg-purple-400 animate-pulse delay-75"></div>
-             <div className="h-1 w-1 rounded-full bg-purple-400 animate-pulse delay-150"></div>
-          </div>
+          <button 
+            onClick={handleCopy}
+            className="p-1.5 hover:bg-purple-500/20 rounded-md transition-colors text-purple-400"
+            title="Copy Thinking History"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
         </div>
         
         {/* Content */}
