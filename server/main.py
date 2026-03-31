@@ -9,6 +9,10 @@ import sys
 # Create the FastAPI App
 app = FastAPI(title="Vibe Training Execution Engine")
 
+# Base directory for skills and file access (Project Root)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Directory of main.py (server/)
+PROJECT_ROOT = os.path.dirname(BASE_DIR)              # One level up (Vibe-ML-platform/)
+
 # Allow the React frontend to communicate with this backend
 app.add_middleware(
     CORSMiddleware,
@@ -94,7 +98,7 @@ async def execute_code(req: ExecuteRequest):
 @app.get("/list_skills")
 async def list_skills():
     try:
-        skills_path = os.path.join(os.getcwd(), "skills")
+        skills_path = os.path.join(PROJECT_ROOT, "skills")
         if not os.path.exists(skills_path):
             return {"skills": []}
             
@@ -110,8 +114,8 @@ async def list_skills():
 async def read_file(req: FileReadRequest):
     try:
         # Security: Normalize path and prevent directory traversal
-        abs_path = os.path.abspath(os.path.join(os.getcwd(), req.path))
-        if not abs_path.startswith(os.getcwd()):
+        abs_path = os.path.abspath(os.path.join(PROJECT_ROOT, req.path))
+        if not abs_path.startswith(PROJECT_ROOT):
             raise HTTPException(status_code=403, detail="Access denied: Path outside workspace")
             
         # Allowed extensions

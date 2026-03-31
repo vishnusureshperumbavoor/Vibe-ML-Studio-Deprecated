@@ -13,7 +13,7 @@ export interface AgentMessage {
     content: string;
 }
 
-export type AgentToolType = 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
+export type AgentToolType = 'get_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
 
 export interface ToolCall {
     id: string;
@@ -102,19 +102,27 @@ export class VibeAgent {
         }
 
         switch (name) {
+            case 'get_skill':
+                const skillName = typeof input === 'object' ? (input.name || '') : input;
+                return await this.toolReadFile(`skills/${skillName}/SKILLS.md`);
             case 'execute_python':
                 // Extraction: If input is an object, get the 'code' property
                 const codeString = typeof input === 'object' ? (input.code || '') : input;
                 return await this.toolExecutePython(codeString);
-            case 'list_skills':
-                return await this.toolListSkills();
             case 'read_file':
-                return await this.toolReadFile(input);
+                const filePath = typeof input === 'object' ? (input.path || input.file || '') : input;
+                return await this.toolReadFile(filePath);
             case 'add_cell':
                 return this.toolAddCell(input);
             case 'edit_cell':
                 return this.toolEditCell(input);
             default:
+                const skills = ['medical-decathlon', 'huggingface', 'kaggle', 'roboflow', 'dependency-management'];
+                if (skills.includes(name)) {
+                    return { 
+                        error: `Unknown tool: '${name}'. '${name}' is a SKILL (a folder in the repository), NOT a tool name. To use this skill, YOU MUST use 'read_file' to read 'skills/${name}/SKILLS.md' and then use 'execute_python' to implement its code. DO NOT try to call '${name}' as a tag name again.` 
+                    };
+                }
                 return { error: `Unknown tool: ${name}` };
         }
     }
@@ -160,13 +168,18 @@ export class VibeAgent {
         try {
             const response = await fetch("http://127.0.0.1:2000/list_skills");
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return await response.json();
+            const data = await response.json();
+            return {
+                ...data,
+                _instruction: "IMPORTANT: The items above are FOLDERS (Skills), not tool names. You cannot call them as <name>. You must 'read_file' their SKILLS.md to use them."
+            };
         } catch (e: any) {
             return { error: `Failed to list skills: ${e.message}` };
         }
     }
 
     private async toolReadFile(path: string) {
+        if (!path) return { error: 'No path provided to read.' };
         try {
             const response = await fetch("http://127.0.0.1:2000/read_file", {
                 method: "POST",

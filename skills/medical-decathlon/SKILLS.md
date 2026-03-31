@@ -1,34 +1,39 @@
 # Medical Segmentation Decathlon (MSD) Skill
 
-**Description:** Use this skill specifically for pulling, caching, and staging massive 3D medical imaging matrices (MRI, CT, PET scans) from the MSD using the specialized MONAI library.
+**Description:** Use this skill for pulling and visualizing 3D medical imaging matrices (MRI, CT) from the MSD using the stable MONAI 'DecathlonDataset' class.
 
 ## Workflow Rules & Guidelines
-1. **Dependencies:** Deep-learning medical data mandates specific libraries for `.nii.gz` arrays. Ensure `monai nibabel torch` are installed.
-2. **Dataset Caching Strategy:** Medical datasets are extremely heavy (often 10s of GBs). You must assign a dedicated `root_dir` for caching using the `DecathlonDataset` wrapper to prevent constant re-downloading across execution loops.
-3. **Boilerplate Example & Transforms:** 3D images almost always lack defined channel dimensions at loading. You MUST dynamically add channel dimensions via `EnsureChannelFirstd`.
+1. **Dependencies:** Ensure `monai nibabel matplotlib` are installed.
+2. **Import Rule:** ALWAYS use `from monai.apps import DecathlonDataset`. Do NOT try to import it from `monai.data`.
+3. **Download Loop:**
    ```python
    from monai.apps import DecathlonDataset
-   from monai.transforms import Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd, ToTensord
+   from monai.transforms import Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd
    import os
+   import matplotlib.pyplot as plt
 
-   root_dir = './data/medical_cache'
+   root_dir = './data'
    os.makedirs(root_dir, exist_ok=True)
    
-   # Safely standardizing Medical 3D Images
-   train_transforms = Compose([
-       LoadImaged(keys=["image", "label"]),
-       EnsureChannelFirstd(keys=["image", "label"]),
-       ScaleIntensityd(keys="image"),
-       ToTensord(keys=["image", "label"])
-   ])
-
-   # Auto-Download and Verification via Monai
-   train_ds = DecathlonDataset(
+   # 1. Load with Download=True
+   dataset = DecathlonDataset(
        root_dir=root_dir,
-       task="Task01_BrainTumour", # Select contextually between Task01 to Task10
-       transform=train_transforms,
+       task="Task04_Hippocampus", # Example: Task01-Task10
        section="training",
-       download=True
+       download=True,
+       transform=Compose([
+           LoadImaged(keys=["image", "label"]),
+           EnsureChannelFirstd(keys=["image", "label"]),
+           ScaleIntensityd(keys="image")
+       ])
    )
+
+   # 2. Visualize the first image slice
+   sample = dataset[0]
+   img = sample["image"][0] # Shape [H, W, D]
+   plt.imshow(img[:, :, img.shape[2]//2], cmap='gray')
+   plt.title("Hippocampus Slice")
+   plt.show()
    ```
-4. **Validation:** Ensure the dataloader parses the volumes before dispatching the task to the ML Architect agent. 3D matrices frequently cause Out of Memory errors, so heavily suggest a batch size of 1 or 2 as a conservative default.
+
+4. **Performance:** Use `batch_size=1` for 3D tasks to avoid OOM (Out of Memory) on local machines.

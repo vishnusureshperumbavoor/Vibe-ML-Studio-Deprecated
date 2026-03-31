@@ -49,7 +49,7 @@ export const ThinkingView: React.FC<ThinkingViewProps> = ({ content, isVisible, 
 
         {/* Footer */}
         <div className="px-4 py-2 bg-black/20 flex items-center justify-between">
-           <span className="text-[10px] text-purple-400/60 font-mono">VSP Agent Loop</span>
+           <span className="text-[10px] text-purple-400/60 font-mono">VML Agent Loop</span>
            <Sparkles className="text-purple-500/40" size={10} />
         </div>
       </div>
