@@ -1,5 +1,5 @@
-import React from 'react';
-import { AlertCircle, Wand2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertCircle, Wand2, CheckCircle2, Copy } from 'lucide-react';
 import { ExecutionStatus } from '../types';
 
 interface CellOutputProps {
@@ -10,7 +10,17 @@ interface CellOutputProps {
 }
 
 export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) => {
+  const [wasCopied, setWasCopied] = useState(false);
+
   if (type === 'markdown') return null; 
+
+  const handleCopy = () => {
+      if (output) {
+          navigator.clipboard.writeText(output);
+          setWasCopied(true);
+          setTimeout(() => setWasCopied(false), 2000);
+      }
+  };
 
   // If there's no output and we're not in a special state (fixing/error), don't render anything
   if (!output && status !== 'error' && status !== 'fixing') return null;
@@ -27,21 +37,43 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) 
 
       {/* Error Output */}
       {status === 'error' || (status === 'fixing' && output) ? (
-         <div className="bg-red-900/20 border-l-2 border-red-500 p-3 text-red-200 font-mono text-xs md:text-sm whitespace-pre-wrap overflow-x-auto rounded-r-sm">
-            <div className="flex items-center gap-2 mb-1 text-red-400 font-bold uppercase tracking-wider text-[10px]">
-                <AlertCircle size={12} />
-                <span>Traceback</span>
+         <div className="bg-red-900/20 border-l-2 border-red-500 p-3 text-red-200 font-mono text-xs md:text-sm whitespace-pre-wrap overflow-x-auto rounded-r-sm group/output relative">
+            <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 text-red-400 font-bold uppercase tracking-wider text-[10px]">
+                    <AlertCircle size={12} />
+                    <span>Traceback</span>
+                </div>
+                {output && (
+                    <button 
+                        onClick={handleCopy}
+                        className={`transition-all duration-200 text-[10px] px-2 py-0.5 rounded border flex items-center gap-1 font-sans font-bold
+                            ${wasCopied ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-red-500/30 hover:bg-red-500/50 border-red-500/50 text-white'}
+                        `}
+                    >
+                        {wasCopied ? (
+                            <>
+                                <CheckCircle2 size={10} />
+                                <span>COPIED!</span>
+                            </>
+                        ) : (
+                            <>
+                                <Copy size={10} />
+                                <span>COPY FULL ERROR LOG</span>
+                            </>
+                        )}
+                    </button>
+                )}
             </div>
             {output}
          </div>
       ) : output ? (
-        // Standard Output
-        <div className="pt-2 border-t border-[#352554]/50 mt-2">
+         // Standard Output
+         <div className="pt-2 border-t border-[#352554]/50 mt-2">
             <div className="font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto max-h-96 custom-scrollbar px-2 opacity-90">
                 {output}
             </div>
-        </div>
+         </div>
       ) : null}
     </div>
   );
-};
+};

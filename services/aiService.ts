@@ -1,10 +1,11 @@
 import { NotebookResponse, GeminiResponse, ExecutionMode } from "../types";
+import { getSystemPrompt } from "./prompts";
 
 // API Key from environment variables
 const apiKey = import.meta.env.VITE_KIMI_API_KEY;
 const API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 
-async function callKimi(messages: any[], temperature = 0.1) {
+export async function callKimi(messages: any[], temperature = 0.1) {
   const maxRetries = 4; // Increased retries for Tier 2 handling
   let attempt = 0;
 
@@ -17,10 +18,11 @@ async function callKimi(messages: any[], temperature = 0.1) {
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'moonshot-v1-32k', // Upgraded to 32k for Tier 2 stability
-          messages: messages,
-          temperature: temperature
-        })
+           model: 'moonshot-v1-32k',
+           messages: messages,
+           temperature: temperature,
+           max_tokens: 4096 // Ensure long code blocks aren't truncated
+         })
       });
 
       // Handle Rate Limiting (429) specifically as suggested by Kimi K2
@@ -51,31 +53,64 @@ async function callKimi(messages: any[], temperature = 0.1) {
   }
 }
 
-export const simulateCodeExecution = async (code: string): Promise<GeminiResponse> => {
-  try {
-    const response = await fetch("http://127.0.0.1:2000/execute", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ code })
-    });
+export const simulateCodeExecution = async (
+    code: string, 
+    onProgress?: (text: string) => void
+): Promise<GeminiResponse> => {
+    try {
+        const response = await fetch("http://127.0.0.1:2000/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code })
+        });
 
-    if (!response.ok) {
-       throw new Error(`Execution server responded with status: ${response.status}`);
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const decoder = new TextDecoder();
+        let fullOutput = "";
+        let isError = false;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+                if (line.trim().startsWith('data: ')) {
+                    try {
+                        const jsonStr = line.trim().slice(6);
+                        const data = JSON.parse(jsonStr);
+                        
+                        // Capture even partial output
+                        if (data.output !== undefined) {
+                            fullOutput += data.output;
+                            if (onProgress) onProgress(fullOutput);
+                        }
+                        
+                        if (data.is_done) {
+                            isError = data.is_error;
+                        }
+                    } catch (e) {
+                        console.warn("JSON Parse Error in stream:", e, "Line:", line);
+                    }
+                }
+            }
+        }
+
+        return { 
+            text: fullOutput, 
+            error: isError ? (fullOutput.trim() || "Execution failed with non-zero exit code") : undefined 
+        };
+
+    } catch (error: any) {
+        console.error("Connection Error:", error);
+        return { text: '', error: "Connect error: " + error.message };
     }
-
-    const data = await response.json();
-    
-    if (data.is_error && data.raw_error) {
-       return { text: data.output || '', error: data.raw_error };
-    }
-
-    return { text: data.output || '' };
-  } catch (error: any) {
-    console.error("Local Execution Connection Error:", error);
-    return { text: '', error: "Make sure the FastAPI backend is running! Run: `python server/main.py`\n\nError: " + error.message };
-  }
 };
 
 export const fixCodeError = async (code: string, error: string): Promise<string> => {
@@ -103,70 +138,46 @@ RECOVERY RULES:
 
 export const generateNotebookStructure = async (prompt: string, mode: ExecutionMode = 'agent'): Promise<NotebookResponse> => {
     try {
-        const systemPrompt = `
-You are an expert Machine Learning Engineer. 
-Your task is to transform a user request into a Jupyter Notebook structure.
-
-CURRENT MODE: ${mode.toUpperCase()}
-
-INSTRUCTIONS FOR AGENT MODE:
-- Generate 4-6 functional cells (Markdown + Python Code).
-- The first code cell MUST include any necessary '!pip install' commands.
-- Python cells MUST contain actual implementation logic (data loading, model def, plotting), not just placeholders.
-- Code must be robust and ready to run.
-
-INSTRUCTIONS FOR PLAN MODE:
-- Generate 1-2 detailed Markdown cells ONLY.
-- Focus on technical architecture, data strategy, and model requirements.
-- DO NOT generate code cells in Plan mode.
-
-AMBIGUITY CHECK:
-- If the prompt is too vague (e.g. "Brain"), return a JSON with a "clarification" field instead of cells.
-
-KNOWLEDGE SKILLS:
-1. MEDICAL: Use MONAI/Nibabel for 3D tasks. Follow HIPAA (no real PHI).
-2. PLATFORMS: Aware of Kaggle, Roboflow, HuggingFace integration.
-3. COMMANDS: Can use macros like @segmentation to trigger MONAI templates.
-
-Output Format:
-{
-  "cells": [
-    { "type": "markdown", "content": "## Section Title\nDetailed explanation..." },
-    { "type": "code", "content": "!pip install ...\nimport ..." }
-  ]
-}
-OR
-{
-  "clarification": "I need to know which dataset you want to use for ..."
-}
-
-STRICT RULE: Return ONLY raw JSON. No markdown backticks. No conversational filler.
-`;
+        const systemPrompt = getSystemPrompt(mode, prompt);
 
         const text = await callKimi([
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `User Prompt: "${prompt}"` }
+            { role: 'user', content: prompt }
         ]);
-        
-        try {
-            let cleanResponse = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
-            const startObj = cleanResponse.indexOf('{');
-            const endObj = cleanResponse.lastIndexOf('}');
-            
-            if (startObj === -1 || endObj === -1) {
-                if (!cleanResponse.includes('{')) return { cells: [], clarification: cleanResponse };
-                throw new Error("No JSON response found.");
+        if (text) {
+            try {
+                let cleanResponse = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                
+                // Fix LLM glitches like "type"": " or "content"": "
+                cleanResponse = cleanResponse.replace(/"(\w+)""\s*:/g, '"$1":');
+                
+                // FIX: LLMs often illegally escape single quotes in JSON strings
+                cleanResponse = cleanResponse.replace(/\\'/g, "'");
+                
+                // FIX: Heuristic for unbalanced quotes in "content" fields (common typo)
+                // If a line ends with a missing quote before a comma, add it
+                cleanResponse = cleanResponse.replace(/(=["']\w+)(?=[,)\s]*",?$)/g, '$1"');
+                
+                // Fix trailing commas in objects/arrays
+                cleanResponse = cleanResponse.replace(/,\s*([\]}])/g, '$1');
+
+                const startObj = cleanResponse.indexOf('{');
+                const endObj = cleanResponse.lastIndexOf('}');
+                
+                if (startObj === -1 || endObj === -1) {
+                    return { cells: [], clarification: text };
+                }
+
+                const cleanText = cleanResponse.substring(startObj, endObj + 1);
+                const data = JSON.parse(cleanText);
+                
+                if (data.clarification) return { cells: [], clarification: data.clarification };
+                return { cells: data.cells || [] };
+            } catch (parseError: any) {
+                if (!text.includes('{')) return { cells: [], clarification: text };
+                return { cells: [], error: "Format error. Raw: " + text };
             }
-
-            const cleanText = cleanResponse.substring(startObj, endObj + 1);
-            const data = JSON.parse(cleanText);
-            
-            if (data.clarification) return { cells: [], clarification: data.clarification };
-            return { cells: data.cells || [] };
-        } catch (parseError: any) {
-            if (!text.includes('{')) return { cells: [], clarification: text };
-            return { cells: [], error: "Format error. Raw: " + text };
         }
     } catch (error: any) {
         return { cells: [], error: error.message };

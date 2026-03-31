@@ -5,6 +5,8 @@ import { Cell } from './components/Cell';
 import { Button } from './components/Button';
 import { CellData, CellType, ExecutionMode } from './types';
 import { simulateCodeExecution, generateNotebookStructure, fixCodeError } from './services/aiService';
+import { VibeAgent } from './services/vibeAgent';
+import { ThinkingView } from './components/ThinkingView';
 
 const INITIAL_CELLS: CellData[] = [];
 
@@ -18,6 +20,7 @@ export default function App() {
   const [prompt, setPrompt] = useState('');
   const [clarification, setClarification] = useState<string | null>(null);
   const [mode, setMode] = useState<ExecutionMode>('agent');
+  const [thinking, setThinking] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
 
@@ -98,19 +101,22 @@ export default function App() {
     const cell = cellsRef.current.find(c => c.id === id);
     if (!cell) return { success: false, output: 'Cell not found' };
 
-    const result = await simulateCodeExecution(cell.content);
+    // Update output live
+    const localResult = await simulateCodeExecution(cell.content, (partial) => {
+        setCells(prev => prev.map(c => c.id === id ? { ...c, output: partial } : c));
+    });
 
     setCells(prev => prev.map(c => c.id === id ? { 
         ...c, 
-        status: result.error ? 'error' : 'success', 
-        output: result.error || result.text,
+        status: localResult.error ? 'error' : 'success', 
+        output: localResult.error || localResult.text,
         executionCount: (c.executionCount || 0) + 1,
         lastRun: Date.now()
     } : c));
 
     return { 
-        success: !result.error, 
-        output: result.error || result.text 
+        success: !localResult.error, 
+        output: localResult.error || localResult.text 
     };
   };
 
@@ -195,13 +201,43 @@ export default function App() {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
     setClarification(null); // Clear any previous clarification
+    setThinking("Analysing your request and preparing a plan...");
     
-    // Pass the mode to the generator
+    if (mode === 'agent') {
+        const agent = new VibeAgent(
+            cellsRef.current,
+            (text) => setThinking(text),
+            (updatedCells) => {
+                setCells(updatedCells);
+                cellsRef.current = updatedCells;
+            }
+        );
+        
+        try {
+            const userPrompt = prompt;
+            setPrompt('');
+            await agent.process(userPrompt);
+        } catch (error: any) {
+             setCells(prev => [...prev, {
+                id: uuidv4(),
+                type: 'markdown',
+                content: `**Agent Error:** ${error.message}`,
+                status: 'error'
+            }]);
+        } finally {
+            setIsGenerating(false);
+            setThinking(null);
+        }
+        return;
+    }
+
+    // Default 'plan' mode remains as legacy logic
     const result = await generateNotebookStructure(prompt, mode);
     
     if (result.clarification) { // Handle clarification
         setClarification(result.clarification);
         setIsGenerating(false);
+        setThinking(null);
         return;
     }
 
@@ -213,27 +249,15 @@ export default function App() {
             status: 'idle'
         }));
         
-        const previousLength = cells.length; // capture current length to know where to start running
-        
         // Update state with new cells
         setCells(prev => {
             const updated = [...prev, ...newCells];
-            cellsRef.current = updated; // Manually update ref immediately for safe measure
+            cellsRef.current = updated; 
             return updated;
         });
         
         setPrompt('');
-        setIsGenerating(false);
-
-        // ONLY START AUTO-PILOT IF IN AGENT MODE
-        if (mode === 'agent') {
-            setTimeout(() => {
-                executeNotebook(previousLength);
-            }, 500);
-        }
-
     } else {
-         // Handle empty or error cases
          if (result.error) {
              setCells(prev => [...prev, {
                 id: uuidv4(),
@@ -242,8 +266,9 @@ export default function App() {
                 status: 'error'
             }]);
          }
-         setIsGenerating(false);
     }
+    setIsGenerating(false);
+    setThinking(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -255,6 +280,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-[#0B090F] text-[#E2D8F0] font-sans selection:bg-purple-500/30">
+      <ThinkingView content={thinking} isVisible={!!thinking} />
       
       {/* Top Header - Minimalist */}
       <header className="flex-none h-14 border-b border-[#352554] bg-[#140F1D] flex items-center px-4 justify-between z-10 sticky top-0">
@@ -263,7 +289,7 @@ export default function App() {
                 {isAutoRunning ? <Zap size={16} className="animate-pulse" /> : <Sparkles size={16} />}
             </div>
             <div>
-                <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">VibeML Agents</h1>
+                <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">VibeML Agent Studio</h1>
                 <span className="text-xs text-[#9480B3] flex items-center gap-2">
                     {isAutoRunning ? (
                         <span className="text-emerald-400 flex items-center gap-1">
@@ -273,7 +299,7 @@ export default function App() {
                             </span>
                             Auto-Pilot Active
                         </span>
-                    ) : 'Vibe Coding Agents are here. Why not Vibe Training Agents?'}
+                    ) : 'Your Intelligent Python notebook is here'}
                 </span>
             </div>
         </div>

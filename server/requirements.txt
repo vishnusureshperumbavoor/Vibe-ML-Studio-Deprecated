@@ -2,10 +2,17 @@
 fastapi>=0.110.0
 uvicorn>=0.29.0
 pydantic>=2.6.0
+requests>=2.31.0
 
-# Base Data Science Utilities (needed for Kimi's auto-generated ML scripts)
+# Medical AI Vibe Stack
+monai>=1.3.0
+nibabel>=5.2.0
+torch>=2.2.0
+torchvision>=0.17.0
+gradio>=4.20.0
+
+# Base Data Science Utilities
 numpy>=1.26.0
 pandas>=2.2.0
 scikit-learn>=1.4.0
 matplotlib>=3.8.0
-

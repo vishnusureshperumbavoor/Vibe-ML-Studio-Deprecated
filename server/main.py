@@ -21,78 +21,112 @@ app.add_middleware(
 class ExecuteRequest(BaseModel):
     code: str
 
+class FileReadRequest(BaseModel):
+    path: str
+
+from fastapi.responses import StreamingResponse
+import json
+
 @app.post("/execute")
-def execute_code(req: ExecuteRequest):
+async def execute_code(req: ExecuteRequest):
     code_lines = req.code.splitlines()
-    python_code_lines = []
+    python_code_lines = ["import os, sys"] # Ensure common libs imported
     
-    # 1. Intercept "Magic Pip" Commands
+    # 1. Intercept "Magic Pip" Commands and convert others to os.system
+    BUILT_INS = {"os", "sys", "urllib", "zipfile", "zipfile36", "tarfile", "time", "json", "math", "re", "shutil", "tempfile", "requests"}
+    
     for line in code_lines:
-        # Strip all whitespace AND invisible characters like BOM (Byte Order Mark)
         stripped = line.strip().lstrip('\ufeff')
-        
-        # If it looks like a notebook magic command
         if stripped.startswith("!") or stripped.startswith("%"):
-            # If it's specifically a pip install command
             if "pip install" in stripped:
                 packages = stripped.replace("!pip install", "").replace("%pip install", "").strip().split()
+                # FILTER: Remove any built-in modules accidentally included by AI
+                packages = [p for p in packages if p.lower() not in BUILT_INS]
+                
                 if packages:
-                    try:
-                        print(f"DEBUG: Intercepted Magic Pip. Installing: {packages}")
-                        subprocess.run(
-                            [sys.executable, "-m", "pip", "install"] + packages, 
-                            check=True, 
-                            capture_output=True, 
-                            text=True
-                        )
-                    except subprocess.CalledProcessError as e:
-                        return {"output": e.stdout, "is_error": True, "raw_error": f"Failed to run auto-install: {e.stderr}"}
+                    subprocess.run([sys.executable, "-m", "pip", "install"] + packages)
+                continue 
             
-            # ALWAYS SKIP magic lines for the final .py file to avoid SyntaxErrors
+            command = stripped.lstrip("!%")
+            python_code_lines.append(line.replace(stripped, f'os.system("{command}")'))
             continue 
             
         python_code_lines.append(line)
             
     clean_code = '\n'.join(python_code_lines)
 
-    # 2. Execute the cleaned Python Script
+    async def stream_output():
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(clean_code)
+                temp_path = f.name
+                
+            # Use a shell to support pipes and redirects if needed, but -u for unbuffered python
+            process = subprocess.Popen(
+                [sys.executable, "-u", temp_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            # Use non-blocking read or a simple loop for real-time output
+            while True:
+                line = process.stdout.readline()
+                if not line and process.poll() is not None:
+                    break
+                if line:
+                    yield f"data: {json.dumps({'output': line, 'is_done': False})}\n\n"
+            
+            return_code = process.wait()
+            
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            
+            yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': return_code != 0})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'output': str(e), 'is_done': True, 'is_error': True})}\n\n"
+
+    return StreamingResponse(stream_output(), media_type="text/event-stream")
+
+@app.get("/list_skills")
+async def list_skills():
     try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(clean_code)
-            temp_path = f.name
+        skills_path = os.path.join(os.getcwd(), "skills")
+        if not os.path.exists(skills_path):
+            return {"skills": []}
             
-        # Spawn a python process to run the temporary file
-        # We use sys.executable to ensure it uses the exact Python environment running the server!
-        result = subprocess.run(
-            [sys.executable, temp_path],
-            capture_output=True,
-            text=True,
-            timeout=600  # 10 minute timeout for training runs
-        )
-        
-        # Clean up the temp script file so we don't leak storage
-        os.remove(temp_path)
-        
-        # Merge stdout and stderr
-        output = result.stdout
-        is_error = False
-        
-        if result.returncode != 0:
-            output += "\n[Execution Error Traceback]:\n" + result.stderr
-            is_error = True
-        elif result.stderr:
-            # Some libraries print progress bars to stderr even if successful
-            output += "\n" + result.stderr
-            
-        if not output.strip() and not is_error:
-            output = "<No Output>"
-            
-        return {"output": output, "is_error": is_error, "raw_error": result.stderr if is_error else None}
-        
-    except subprocess.TimeoutExpired:
-        return {"output": "", "is_error": True, "raw_error": "Execution timed out after 10 minutes."}
+        skills = []
+        for d in os.listdir(skills_path):
+            if os.path.isdir(os.path.join(skills_path, d)):
+                skills.append(d)
+        return {"skills": skills}
     except Exception as e:
-        return {"output": "", "is_error": True, "raw_error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/read_file")
+async def read_file(req: FileReadRequest):
+    try:
+        # Security: Normalize path and prevent directory traversal
+        abs_path = os.path.abspath(os.path.join(os.getcwd(), req.path))
+        if not abs_path.startswith(os.getcwd()):
+            raise HTTPException(status_code=403, detail="Access denied: Path outside workspace")
+            
+        # Allowed extensions
+        ext = os.path.splitext(abs_path)[1].lower()
+        if ext not in [".md", ".py", ".json", ".txt", ".csv", ".yaml", ".yml"]:
+            raise HTTPException(status_code=400, detail=f"File extension {ext} not allowed for reading.")
+
+        if not os.path.exists(abs_path):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return {"content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

@@ -147,7 +147,9 @@ export const Cell: React.FC<CellProps> = ({
         <button 
             onClick={handleCopy} 
             className={`p-1.5 rounded flex items-center gap-1.5 text-[10px] font-bold transition-all duration-200
-                ${wasCopied ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-white hover:bg-white/10'}
+                ${wasCopied ? 'text-emerald-400 bg-emerald-500/10' : 
+                  cell.status === 'error' ? 'text-red-400 hover:text-white hover:bg-red-500/20' :
+                  'text-gray-400 hover:text-white hover:bg-white/10'}
             `} 
             title="Copy Content"
         >
