@@ -1,6 +1,6 @@
 export type ExecutionMode = 'agent' | 'plan';
 
-export type CellType = 'code' | 'markdown';
+export type CellType = 'code' | 'markdown' | 'query';
 
 export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'fixing' | 'recovering';
 

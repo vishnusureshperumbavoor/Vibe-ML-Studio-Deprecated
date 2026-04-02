@@ -9,5 +9,5 @@ cd server
 python main.py
 
 ## HF MCP Server
-cd hf-mcp-server  
+cd hf-server  
 node index.mjs

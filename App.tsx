@@ -13,6 +13,7 @@ const INITIAL_CELLS: CellData[] = [];
 export default function App() {
   const [cells, setCells] = useState<CellData[]>(INITIAL_CELLS);
   const cellsRef = useRef<CellData[]>(INITIAL_CELLS); // Ref to access latest state in async loop
+  const queryHistoryRef = useRef<{ cell: CellData; index: number }[]>([]);
   
   const [activeCellId, setActiveCellId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -25,6 +26,50 @@ export default function App() {
   const [activeTask, setActiveTask] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
+
+  const syncQueryIndexes = (cells: CellData[]) => {
+    const updated = queryHistoryRef.current
+      .map(entry => {
+        const newIndex = cells.findIndex(cell => cell.id === entry.cell.id);
+        if (newIndex === -1) return null;
+        return { ...entry, index: newIndex };
+      })
+      .filter((entry): entry is { cell: CellData; index: number } => entry !== null);
+    const seen = new Set<string>();
+    queryHistoryRef.current = updated.filter(entry => {
+      if (seen.has(entry.cell.id)) return false;
+      seen.add(entry.cell.id);
+      return true;
+    });
+  };
+
+  const recordQueryCell = (cell: CellData, index: number) => {
+    queryHistoryRef.current = queryHistoryRef.current.filter(entry => entry.cell.id !== cell.id);
+    queryHistoryRef.current.push({ cell, index });
+  };
+
+  const reconcileQueryCells = (candidateCells: CellData[]) => {
+    const merged = [...candidateCells];
+    const missingHistory = queryHistoryRef.current.filter(entry =>
+      !merged.some(cell => cell.id === entry.cell.id)
+    );
+
+    missingHistory.forEach(entry => {
+      const insertIndex = Math.max(0, Math.min(entry.index, merged.length));
+      merged.splice(insertIndex, 0, entry.cell);
+    });
+
+    const deduped = [];
+    const seen = new Set<string>();
+    merged.forEach(cell => {
+      if (seen.has(cell.id)) return;
+      seen.add(cell.id);
+      deduped.push(cell);
+    });
+
+    syncQueryIndexes(deduped);
+    return deduped;
+  };
 
   // Sync ref with state
   useEffect(() => {
@@ -68,15 +113,23 @@ export default function App() {
   };
 
   const deleteCell = (id: string) => {
-    setCells(prev => prev.filter(c => c.id !== id));
     if (activeCellId === id) setActiveCellId(null);
+    setCells(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      cellsRef.current = updated;
+      queryHistoryRef.current = queryHistoryRef.current.filter(entry => entry.cell.id !== id);
+      syncQueryIndexes(updated);
+      return updated;
+    });
   };
 
   const clearAll = () => {
       setCells([]);
+      cellsRef.current = [];
       setActiveCellId(null);
       stopExecutionRef.current = true;
       setIsAutoRunning(false);
+      queryHistoryRef.current = [];
   }
 
   const moveCell = (id: string, direction: 'up' | 'down') => {
@@ -203,8 +256,26 @@ export default function App() {
     if (!prompt.trim() || isGenerating) return;
     setIsGenerating(true);
     setThinking("Analysing your request and preparing a plan...");
-    setActiveTask(prompt);
     
+    const userPrompt = prompt;
+    setPrompt('');
+
+    // **Append the user query as a standard cell so they flow sequentially**
+    const queryCell: CellData = {
+        id: uuidv4(),
+        type: 'query',
+        content: userPrompt,
+        status: 'success'
+    };
+    
+    setCells(prev => {
+        const updated = [...prev, queryCell];
+        cellsRef.current = updated;
+        recordQueryCell(queryCell, updated.length - 1);
+        syncQueryIndexes(updated);
+        return updated;
+      });
+
     if (mode === 'agent') {
         setThinkingHistory([]); // Reset history for new session
         const agent = new VibeAgent(
@@ -214,15 +285,14 @@ export default function App() {
                 setThinkingHistory(prev => [...prev, text]);
             },
             (updatedCells) => {
-                setCells(updatedCells);
-                cellsRef.current = updatedCells;
+                const mergedCells = reconcileQueryCells(updatedCells);
+                setCells(mergedCells);
+                cellsRef.current = mergedCells;
             }
         );
         
         try {
             await agent.init();
-            const userPrompt = prompt;
-            setPrompt('');
             await agent.process(userPrompt);
         } catch (error: any) {
              setCells(prev => [...prev, {
@@ -259,7 +329,8 @@ export default function App() {
         // Update state with new cells
         setCells(prev => {
             const updated = [...prev, ...newCells];
-            cellsRef.current = updated; 
+            cellsRef.current = updated;
+            syncQueryIndexes(updated);
             return updated;
         });
         
@@ -338,23 +409,6 @@ export default function App() {
         <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8 transition-all duration-500">
         <div className="max-w-5xl mx-auto space-y-6">
 
-          {/* Compact Active Task Card */}
-          {activeTask && (
-              <div className="bg-[#1A1127] border border-[#352554] rounded-xl p-3 mb-6 shadow-lg relative overflow-hidden group flex items-center gap-3">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500/50"></div>
-                  <div className="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
-                      <Rocket className="text-indigo-400" size={16} />
-                  </div>
-                  <div className="flex-1">
-                      <p className="text-sm font-medium text-[#E2D8F0]/90 leading-tight">
-                          {activeTask}
-                      </p>
-                  </div>
-                  <Button size="sm" variant="ghost" onClick={() => setActiveTask(null)} className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 size={14} />
-                  </Button>
-              </div>
-          )}
 
           {/* Clarification Loop UI */}
           {clarification && (

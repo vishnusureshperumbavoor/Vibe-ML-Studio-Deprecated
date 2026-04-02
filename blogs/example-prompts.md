@@ -1,3 +1,7 @@
+Display image https://post.healthline.com/wp-content/uploads/2022/01/CT-scan-of-the-brain-body5.jpg
+
+Find Huggingface Spaces that can transcribe audio files.
+
 Explore the Task04_Hippocampus dataset in medical decathlon and show me a few slices
 
 Set up a basic training pipeline for a 3D medical image segmentation model using MONAI. This should include data loading with transforms, defining a U-Net architecture, setting up a Dice loss function and Adam optimizer. Train the model for 5 epochs on the Task04_Hippocampus dataset and display the training loss and Dice metric over epochs.

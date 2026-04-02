@@ -1,4 +1,4 @@
-import { Play, Copy, Wand2, CheckCircle2, Loader2, XCircle, Zap } from 'lucide-react';
+import { Play, Copy, Wand2, CheckCircle2, Loader2, XCircle, Zap, Rocket } from 'lucide-react';
 import React, { useState } from 'react';
 import { CellData } from '../types';
 import { EditorArea } from './EditorArea';
@@ -62,6 +62,41 @@ export const Cell: React.FC<CellProps> = ({
       if (isActive) return `${base} border-purple-800 bg-[#1D152A] shadow-md`;
       return `${base} border-transparent hover:border-[#352554] hover:bg-[#1A1224]`;
   };
+
+  if (cell.type === 'query') {
+      return (
+          <div className="bg-[#1A1127] border border-[#352554] rounded-xl p-3 mb-6 shadow-lg relative overflow-hidden flex items-center gap-3">
+              <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500/50"></div>
+              <div className="p-2 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                  <Rocket className="text-indigo-400" size={16} />
+              </div>
+              <div className="flex-1">
+                  <p className="text-sm font-medium text-[#E2D8F0]/90 leading-tight">
+                      {cell.content}
+                  </p>
+              </div>
+              <button
+                  onClick={handleCopy}
+                  className={`p-1.5 rounded flex items-center gap-1.5 text-[10px] font-bold transition-all duration-200
+                      ${wasCopied ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-400 hover:text-white hover:bg-white/10'}
+                  `}
+                  title="Copy query"
+              >
+                  {wasCopied ? (
+                      <>
+                          <CheckCircle2 size={12} />
+                          <span>COPIED!</span>
+                      </>
+                  ) : (
+                      <>
+                          <Copy size={12} />
+                          <span>COPY</span>
+                      </>
+                  )}
+              </button>
+          </div>
+      );
+  }
 
   return (
     <div 
