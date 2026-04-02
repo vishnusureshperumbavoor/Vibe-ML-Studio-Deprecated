@@ -35,6 +35,11 @@ class ExecuteRequest(BaseModel):
 class FileReadRequest(BaseModel):
     path: str
 
+class FileWriteRequest(BaseModel):
+    skill_name: str
+    filename: str
+    content: str
+
 from fastapi.responses import StreamingResponse
 import json
 
@@ -148,6 +153,41 @@ async def read_file(req: FileReadRequest):
         with open(abs_path, 'r', encoding='utf-8') as f:
             content = f.read()
         return {"content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/save_skill")
+async def save_skill(req: FileWriteRequest):
+    """
+    Skill Factory: Saves a new skill definition (L2) or resource (L3) to the skills/ directory.
+    Standard Path: skills/<skill_name>/SKILL.md
+    Resource Path: skills/<skill_name>/references/<filename>
+    """
+    try:
+        # Security: kebab-case names only
+        import re
+        if not re.match(r'^[a-z0-9\-]+$', req.skill_name):
+            raise HTTPException(status_code=400, detail="Invalid skill name. Use kebab-case.")
+            
+        skill_dir = os.path.join(PROJECT_ROOT, "skills", req.skill_name)
+        
+        # Handle reference files vs main skill docs
+        if req.filename.startswith("references/"):
+            target_dir = os.path.join(skill_dir, "references")
+            target_filename = req.filename.replace("references/", "")
+        else:
+            target_dir = skill_dir
+            target_filename = req.filename
+
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+
+        abs_path = os.path.join(target_dir, target_filename)
+        
+        with open(abs_path, 'w', encoding='utf-8') as f:
+            f.write(req.content)
+            
+        return {"success": True, "path": abs_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -13,7 +13,7 @@ export interface AgentMessage {
     content: string;
 }
 
-export type AgentToolType = 'get_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
+export type AgentToolType = 'load_skill' | 'load_skill_resource' | 'save_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
 
 export class VibeAgent {
     private messages: AgentMessage[] = [];
@@ -63,8 +63,8 @@ export class VibeAgent {
                 toolResults.push(results);
             }
 
-            // Format B: Direct Tool Tags like <add_cell>{...}</add_cell>
-            const toolNames: AgentToolType[] = ['add_cell', 'edit_cell', 'execute_python', 'get_skill', 'read_file', 'list_skills'];
+            // Format B: Direct Tool Tags
+            const toolNames: AgentToolType[] = ['add_cell', 'edit_cell', 'execute_python', 'load_skill', 'load_skill_resource', 'save_skill', 'read_file', 'list_skills'];
             for (const tName of toolNames) {
                 const tagRegex = new RegExp(`<${tName}>([\\s\\S]*?)<\\/${tName}>`, 'gi');
                 let tm;
@@ -122,11 +122,18 @@ export class VibeAgent {
         return await this.dispatchTool(nameMatch[1].trim() as any, this.parseInput(inputMatch[1]));
     }
 
-    private async dispatchTool(name: AgentToolType, input: any): Promise<any> {
+    private async dispatchTool(name: AgentToolType | 'get_skill', input: any): Promise<any> {
         switch (name) {
+            case 'load_skill':
             case 'get_skill':
                 const skillName = typeof input === 'object' ? (input.name || '') : input;
                 return await this.toolReadFile(`skills/${skillName}/SKILLS.md`);
+            case 'load_skill_resource':
+                const resSkill = typeof input === 'object' ? input.skill : '';
+                const resFile = typeof input === 'object' ? (input.path || input.filename) : '';
+                return await this.toolReadFile(`skills/${resSkill}/references/${resFile}`);
+            case 'save_skill':
+                return await this.toolSaveSkill(input);
             case 'execute_python':
                 const codeString = typeof input === 'object' ? (input.code || '') : input;
                 return await this.toolExecutePython(codeString);
@@ -177,6 +184,17 @@ export class VibeAgent {
         try {
             const resp = await fetch("http://127.0.0.1:2000/read_file", {
                 method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path })
+            });
+            return await resp.json();
+        } catch (e: any) { 
+            return { error: e.message };
+        }
+    }
+
+    private async toolSaveSkill(input: { skill_name: string, filename: string, content: string }) {
+        try {
+            const resp = await fetch("http://127.0.0.1:2000/save_skill", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
             });
             return await resp.json();
         } catch (e: any) { 

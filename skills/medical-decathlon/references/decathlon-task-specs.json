@@ -1,0 +1,7 @@
+{
+  "Task01_BrainTumour": { "modality": "MRI", "label": { "0": "background", "1": "edema", "2": "non-enhancing tumour", "3": "enhancing tumour" } },
+  "Task02_Heart": { "modality": "MRI", "label": { "0": "background", "1": "left atrium" } },
+  "Task03_Liver": { "modality": "CT", "label": { "0": "background", "1": "liver", "2": "cancer" } },
+  "Task04_Hippocampus": { "modality": "MRI", "label": { "0": "background", "1": "anterior", "2": "posterior" } },
+  "Task05_Prostate": { "modality": "MRI", "label": { "0": "background", "1": "prostate", "2": "transition zone" } }
+}

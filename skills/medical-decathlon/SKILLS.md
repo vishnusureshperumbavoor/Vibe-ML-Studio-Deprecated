@@ -11,7 +11,9 @@
    from monai.transforms import Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd
    import os
    import matplotlib.pyplot as plt
-
+5. **Task Metadata**: 
+   - To see detailed modality and labels for a specific task, use:
+     `<load_skill_resource>{"skill": "medical-decathlon", "filename": "decathlon-task-specs.json"}</load_skill_resource>`
    root_dir = './data'
    os.makedirs(root_dir, exist_ok=True)
    

@@ -1,5 +1,7 @@
 Explore the Task04_Hippocampus dataset in medical decathlon and show me a few slices
 
+Set up a basic training pipeline for a 3D medical image segmentation model using MONAI. This should include data loading with transforms, defining a U-Net architecture, setting up a Dice loss function and Adam optimizer. Train the model for 5 epochs on the Task04_Hippocampus dataset and display the training loss and Dice metric over epochs.
+
 "Load the librosa example audio 'trumpet' and plot its waveform using matplotlib."
 
 "Build an 3D UNet to segment coronary arteries from my DICOM files, benchmark it against the ASOCA leaderboards, and deploy a Gradio dashboard with a slider to view the 3D slices." Agent Action: Trains MONAI model -> Computes Dice Score -> Launches Gradio UI with a slice-by-slice viewer.
