@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,6 +7,11 @@ import asyncio
 import os
 import tempfile
 import sys
+from dotenv import load_dotenv
+from contextlib import asynccontextmanager
+
+# Load HF_TOKEN from server/.env
+load_dotenv()
 
 # Create the FastAPI App
 app = FastAPI(title="Vibe Training Execution Engine")
@@ -201,6 +206,7 @@ async def get_image(filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(file_path)
+
 
 if __name__ == "__main__":
     import uvicorn

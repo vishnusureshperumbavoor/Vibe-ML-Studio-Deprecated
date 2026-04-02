@@ -220,6 +220,7 @@ export default function App() {
         );
         
         try {
+            await agent.init();
             const userPrompt = prompt;
             setPrompt('');
             await agent.process(userPrompt);

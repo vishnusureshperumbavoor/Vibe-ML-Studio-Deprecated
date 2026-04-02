@@ -16,10 +16,13 @@ export interface AgentMessage {
 export type AgentToolType = 'load_skill' | 'load_skill_resource' | 'save_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
 
 export class VibeAgent {
+    private hfTools: any[] = [];
     private messages: AgentMessage[] = [];
     private onThinking: (text: string) => void;
     private onUpdateCells: (cells: CellData[]) => void;
     private currentCells: CellData[] = [];
+    private baseUrl = "http://127.0.0.1:2000";
+    private mcpUrl = "http://127.0.0.1:1001";
 
     constructor(
         cells: CellData[], 
@@ -29,9 +32,30 @@ export class VibeAgent {
         this.currentCells = cells;
         this.onThinking = onThinking;
         this.onUpdateCells = onUpdateCells;
-        
-        // Initial System Message
-        this.messages.push({ role: 'system' as any, content: VIBE_MASTER_AGENT_PROMPT });
+    }
+
+    async init() {
+        try {
+            const resp = await fetch(`${this.mcpUrl}/mcp/list`);
+            const data = await resp.json();
+            this.hfTools = data.tools || [];
+            console.log("VibeAgent loaded MCP tools:", this.hfTools.map((t: any) => t.name));
+        } catch (e) {
+            console.error("Failed to load MCP tools:", e);
+        }
+
+        let mcpPrompt = "";
+        if (this.hfTools.length > 0) {
+            mcpPrompt = `\n\n### HUB TOOLS (Hugging Face MCP):\nYou have access to these NATIVE tools. Call them using <tool_use> tags:\n`;
+            this.hfTools.forEach((t: any) => {
+                mcpPrompt += `- **${t.name}**: ${t.description}\n  Args: ${JSON.stringify(t.inputSchema)}\n`;
+            });
+        }
+
+        // Initialize System Message with combined prompt
+        this.messages = [
+            { role: 'system' as any, content: VIBE_MASTER_AGENT_PROMPT + mcpPrompt }
+        ];
     }
 
     /**
@@ -122,7 +146,7 @@ export class VibeAgent {
         return await this.dispatchTool(nameMatch[1].trim() as any, this.parseInput(inputMatch[1]));
     }
 
-    private async dispatchTool(name: AgentToolType | 'get_skill', input: any): Promise<any> {
+    private async dispatchTool(name: string, input: any): Promise<any> {
         switch (name) {
             case 'load_skill':
             case 'get_skill':
@@ -147,7 +171,25 @@ export class VibeAgent {
             case 'list_skills':
                 return await this.toolListSkills();
             default:
+                // Check if it's an MCP tool
+                const isMCP = this.hfTools.find((t: any) => t.name === name);
+                if (isMCP) {
+                    return await this.toolCallMCP(name, input);
+                }
                 return { error: `Unknown tool: ${name}` };
+        }
+    }
+
+    private async toolCallMCP(name: string, arguments_obj: any) {
+        try {
+            const resp = await fetch(`${this.mcpUrl}/mcp/call`, {
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ name, arguments: arguments_obj })
+            });
+            return await resp.json();
+        } catch (e: any) { 
+            return { error: e.message };
         }
     }
 
