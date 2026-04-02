@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
+import asyncio
 import os
 import tempfile
 import sys
@@ -12,6 +14,11 @@ app = FastAPI(title="Vibe Training Execution Engine")
 # Base directory for skills and file access (Project Root)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Directory of main.py (server/)
 PROJECT_ROOT = os.path.dirname(BASE_DIR)              # One level up (Vibe-ML-platform/)
+DATA_DIR = os.path.join(BASE_DIR, "data")             # server/data/
+
+# Ensure the data directory exists for generated images
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
 # Allow the React frontend to communicate with this backend
 app.add_middleware(
@@ -60,38 +67,50 @@ async def execute_code(req: ExecuteRequest):
     clean_code = '\n'.join(python_code_lines)
 
     async def stream_output():
+        temp_path = None
         try:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                 f.write(clean_code)
                 temp_path = f.name
                 
-            # Use a shell to support pipes and redirects if needed, but -u for unbuffered python
-            process = subprocess.Popen(
-                [sys.executable, "-u", temp_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
+            # Use asyncio.create_subprocess_exec for non-blocking I/O
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, "-u", temp_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT
             )
             
-            # Use non-blocking read or a simple loop for real-time output
+            is_gradio = False
+            
+            # Read output line by line as it arrives
             while True:
-                line = process.stdout.readline()
-                if not line and process.poll() is not None:
+                line_bytes = await process.stdout.readline()
+                if not line_bytes:
                     break
-                if line:
-                    yield f"data: {json.dumps({'output': line, 'is_done': False})}\n\n"
+                    
+                line = line_bytes.decode('utf-8', errors='replace')
+                
+                # Detect Gradio startup
+                if "Running on local URL" in line:
+                    is_gradio = True
+                    yield f"data: {json.dumps({'output': line, 'is_done': True, 'is_gradio': True})}\n\n"
+                
+                yield f"data: {json.dumps({'output': line, 'is_done': False})}\n\n"
             
-            return_code = process.wait()
+            # Wait for process to finish
+            return_code = await process.wait()
             
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            
-            yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': return_code != 0})}\n\n"
+            if not is_gradio:
+                yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': return_code != 0})}\n\n"
             
         except Exception as e:
             yield f"data: {json.dumps({'output': str(e), 'is_done': True, 'is_error': True})}\n\n"
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
 
     return StreamingResponse(stream_output(), media_type="text/event-stream")
 
@@ -131,6 +150,17 @@ async def read_file(req: FileReadRequest):
         return {"content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/images/{filename}")
+async def get_image(filename: str):
+    """
+    Serves a generated image file from the server/data directory.
+    Usage: [IMAGE: slice.png] in stdout will be picked up by React.
+    """
+    file_path = os.path.join(DATA_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(file_path)
 
 if __name__ == "__main__":
     import uvicorn

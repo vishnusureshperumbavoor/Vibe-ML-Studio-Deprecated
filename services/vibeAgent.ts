@@ -15,12 +15,6 @@ export interface AgentMessage {
 
 export type AgentToolType = 'get_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
 
-export interface ToolCall {
-    id: string;
-    type: AgentToolType;
-    input: any;
-}
-
 export class VibeAgent {
     private messages: AgentMessage[] = [];
     private onThinking: (text: string) => void;
@@ -47,30 +41,54 @@ export class VibeAgent {
         this.messages.push({ role: 'user', content: userPrompt });
         let isDone = false;
         let turns = 0;
-        const maxTurns = 15;
+        const maxTurns = 20;
 
         while (!isDone && turns < maxTurns) {
             turns++;
-            const response = await callKimi(this.messages as any, 0.2); // Slower temperature for logic
+            const response = await callKimi(this.messages as any, 0.2); 
             this.messages.push({ role: 'assistant', content: response });
 
             // 1. Parse Thinking
             const thinking = this.extractTag(response, 'thinking');
             if (thinking) this.onThinking(thinking);
 
-            // 2. Parse Tool Calls
-            const toolUse = this.extractTag(response, 'tool_use');
-            if (toolUse) {
-                const results = await this.handleToolUse(toolUse);
+            // 2. Fuzzy Multi-Tool Extraction (Allows direct tags like <add_cell>)
+            let toolResults: any[] = [];
+            
+            // Format A: Standard Wrapper <tool_use><name>X</name><input>Y</input></tool_use>
+            const wrappedRegex = /<tool_use>([\s\S]*?)<\/tool_use>/gi;
+            let m;
+            while ((m = wrappedRegex.exec(response)) !== null) {
+                const results = await this.handleWrappedTool(m[1]);
+                toolResults.push(results);
+            }
+
+            // Format B: Direct Tool Tags like <add_cell>{...}</add_cell>
+            const toolNames: AgentToolType[] = ['add_cell', 'edit_cell', 'execute_python', 'get_skill', 'read_file', 'list_skills'];
+            for (const tName of toolNames) {
+                const tagRegex = new RegExp(`<${tName}>([\\s\\S]*?)<\\/${tName}>`, 'gi');
+                let tm;
+                while ((tm = tagRegex.exec(response)) !== null) {
+                    const inputStr = tm[1].trim();
+                    const input = this.parseInput(inputStr);
+                    const res = await this.dispatchTool(tName, input);
+                    toolResults.push(res);
+                }
+            }
+
+            if (toolResults.length > 0) {
                 this.messages.push({ 
                     role: 'user', 
-                    content: `<tool_result>\n${JSON.stringify(results, null, 2)}\n</tool_result>` 
+                    content: `<tool_results>\n${JSON.stringify(toolResults, null, 2)}\n</tool_results>` 
                 });
             } else {
-                // AUTO-ADD MARKDOWN CELL: If the agent is just talking, sync it to the UI
-                const cleanText = response.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
-                if (cleanText) {
-                    this.toolAddCell({ type: 'markdown', content: cleanText });
+                // FALLBACK: Auto-promote reasoning if no cells exist yet
+                const chatText = response.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').replace(/<[\s\S]*?>/g, '').trim();
+                const thinkingText = thinking ? thinking.replace(/<[\s\S]*?>/g, '').trim() : '';
+                const finalCellContent = chatText || (this.currentCells.length === 0 ? thinkingText : '');
+
+                if (finalCellContent) {
+                    this.toolAddCell({ type: 'markdown', content: finalCellContent });
                 }
                 isDone = true;
             }
@@ -83,30 +101,33 @@ export class VibeAgent {
         return match ? match[1].trim() : null;
     }
 
-    private async handleToolUse(xmlFragment: string): Promise<any> {
-        // Very basic XML parser for name and input
+    private parseInput(text: string): any {
+        // Attempt to extract content from internal tags if it's not raw JSON
+        if (text.includes('<type>') && text.includes('<content>')) {
+            const type = this.extractTag(text, 'type') as any;
+            const content = this.extractTag(text, 'content');
+            if (type && content) return { type, content };
+        }
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            return text; 
+        }
+    }
+
+    private async handleWrappedTool(xmlFragment: string): Promise<any> {
         const nameMatch = xmlFragment.match(/<name>([\s\S]*?)<\/name>/);
         const inputMatch = xmlFragment.match(/<input>([\s\S]*?)<\/input>/);
+        if (!nameMatch || !inputMatch) return { error: 'Invalid tool_use structure.' };
+        return await this.dispatchTool(nameMatch[1].trim() as any, this.parseInput(inputMatch[1]));
+    }
 
-        if (!nameMatch || !inputMatch) {
-            return { error: 'Invalid tool use format. Expected <name> and <input> tags.' };
-        }
-
-        const name = nameMatch[1].trim() as AgentToolType;
-        let input: any;
-        try {
-            input = JSON.parse(inputMatch[1].trim());
-        } catch (e) {
-            // Fallback for non-JSON input (e.g. raw code)
-            input = inputMatch[1].trim();
-        }
-
+    private async dispatchTool(name: AgentToolType, input: any): Promise<any> {
         switch (name) {
             case 'get_skill':
                 const skillName = typeof input === 'object' ? (input.name || '') : input;
                 return await this.toolReadFile(`skills/${skillName}/SKILLS.md`);
             case 'execute_python':
-                // Extraction: If input is an object, get the 'code' property
                 const codeString = typeof input === 'object' ? (input.code || '') : input;
                 return await this.toolExecutePython(codeString);
             case 'read_file':
@@ -116,99 +137,62 @@ export class VibeAgent {
                 return this.toolAddCell(input);
             case 'edit_cell':
                 return this.toolEditCell(input);
+            case 'list_skills':
+                return await this.toolListSkills();
             default:
-                const skills = ['medical-decathlon', 'huggingface', 'kaggle', 'roboflow', 'dependency-management'];
-                if (skills.includes(name)) {
-                    return { 
-                        error: `Unknown tool: '${name}'. '${name}' is a SKILL (a folder in the repository), NOT a tool name. To use this skill, YOU MUST use 'read_file' to read 'skills/${name}/SKILLS.md' and then use 'execute_python' to implement its code. DO NOT try to call '${name}' as a tag name again.` 
-                    };
-                }
                 return { error: `Unknown tool: ${name}` };
         }
     }
 
-    // --- TOOL IMPLEMENTATIONS ---
-
     private async toolExecutePython(code: string) {
-        if (!code) return { error: 'No code provided to execute.' };
-        
-        // 1. Create a cell for this execution so the user sees it
+        if (!code) return { error: 'No code provided.' };
         const cellId = uuidv4();
-        const newCell: CellData = {
-            id: cellId,
-            type: 'code',
-            content: code,
-            status: 'running'
-        };
+        const newCell: CellData = { id: cellId, type: 'code', content: code, status: 'running' };
         this.currentCells = [...this.currentCells, newCell];
         this.onUpdateCells(this.currentCells);
 
-        // 2. Proxy to existing execution engine with live updates
         const result = await simulateCodeExecution(code, (partial) => {
-            this.currentCells = this.currentCells.map(c => 
-                c.id === cellId ? { ...c, output: partial } : c
-            );
+            this.currentCells = this.currentCells.map(c => c.id === cellId ? { ...c, output: partial } : c);
             this.onUpdateCells(this.currentCells);
         });
 
-        // 3. Update final status
         this.currentCells = this.currentCells.map(c => 
-            c.id === cellId ? { 
-                ...c, 
-                status: result.error ? 'error' : 'success',
-                output: result.error || result.text 
-            } : c
+            c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c
         );
         this.onUpdateCells(this.currentCells);
-
         return result;
     }
 
     private async toolListSkills() {
         try {
-            const response = await fetch("http://127.0.0.1:2000/list_skills");
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-            return {
-                ...data,
-                _instruction: "IMPORTANT: The items above are FOLDERS (Skills), not tool names. You cannot call them as <name>. You must 'read_file' their SKILLS.md to use them."
-            };
-        } catch (e: any) {
-            return { error: `Failed to list skills: ${e.message}` };
+            const resp = await fetch("http://127.0.0.1:2000/list_skills");
+            return await resp.json();
+        } catch (e: any) { 
+            return { error: e.message };
         }
     }
 
     private async toolReadFile(path: string) {
-        if (!path) return { error: 'No path provided to read.' };
+        if (!path) return { error: 'Empty path.' };
         try {
-            const response = await fetch("http://127.0.0.1:2000/read_file", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path })
+            const resp = await fetch("http://127.0.0.1:2000/read_file", {
+                method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path })
             });
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return await response.json();
-        } catch (e: any) {
-            return { error: `Failed to read file: ${e.message}` };
+            return await resp.json();
+        } catch (e: any) { 
+            return { error: e.message };
         }
     }
 
     private toolAddCell(input: { type: CellType, content: string }) {
-        const newCell: CellData = {
-            id: uuidv4(),
-            type: input.type,
-            content: input.content,
-            status: 'idle'
-        };
+        const newCell: CellData = { id: uuidv4(), type: input.type, content: input.content, status: 'idle' };
         this.currentCells = [...this.currentCells, newCell];
         this.onUpdateCells(this.currentCells);
         return { success: true, cellId: newCell.id };
     }
 
     private toolEditCell(input: { id: string, content: string }) {
-        this.currentCells = this.currentCells.map(c => 
-            c.id === input.id ? { ...c, content: input.content } : c
-        );
+        this.currentCells = this.currentCells.map(c => c.id === input.id ? { ...c, content: input.content } : c);
         this.onUpdateCells(this.currentCells);
         return { success: true };
     }

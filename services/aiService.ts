@@ -92,8 +92,14 @@ export const simulateCodeExecution = async (
                             if (onProgress) onProgress(fullOutput);
                         }
                         
+                        // CRITICAL: Break early for Gradio or completion signals
                         if (data.is_done) {
                             isError = data.is_error;
+                            reader.cancel(); // Stop reading from the stream
+                            return { 
+                                text: fullOutput, 
+                                error: isError ? (fullOutput.trim() || "Execution failed") : undefined 
+                            };
                         }
                     } catch (e) {
                         console.warn("JSON Parse Error in stream:", e, "Line:", line);
