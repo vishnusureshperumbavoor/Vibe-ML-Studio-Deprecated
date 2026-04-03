@@ -4,7 +4,7 @@ import { callKimi, simulateCodeExecution } from "./aiService";
 import { VML_SYSTEM_PROMPT } from "./prompts/vmlSystemPrompt";
 
 /**
- * VibeAgent handles the dynamic, iterative conversation loop with the LLM.
+ * VMLAgent handles the dynamic, iterative conversation loop with the LLM.
  * It uses XML tags for tool calling, reasoning, and notebook management.
  */
 
@@ -23,14 +23,13 @@ export type AgentToolType =
   | "add_cell"
   | "edit_cell";
 
-export class VibeAgent {
+export class VMLAgent {
   private mcpTools: any[] = [];
   private mcpToolServerByName: Record<string, string> = {};
   private messages: AgentMessage[] = [];
   private onThinking: (text: string) => void;
   private onUpdateCells: (cells: CellData[]) => void;
   private currentCells: CellData[] = [];
-  private baseUrl = "http://127.0.0.1:2000";
   private mcpServers = {
     huggingface: "http://127.0.0.1:1001",
     kaggle: "http://127.0.0.1:1002",
@@ -80,7 +79,7 @@ export class VibeAgent {
 
     if (this.mcpTools.length > 0) {
       console.log(
-        "VibeAgent loaded MCP tools:",
+        "VMLAgent loaded MCP tools:",
         this.mcpTools.map((t: any) => `${t._mcpServerId}:${t.name}`),
       );
     }

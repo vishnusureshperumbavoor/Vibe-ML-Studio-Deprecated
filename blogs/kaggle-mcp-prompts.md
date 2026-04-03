@@ -1,6 +1,6 @@
 Use Kaggle tools to search datasets for chest xray pneumonia (page_size 5). Show title, owner, download_count, last_updated, and the dataset slug.
-Get dataset info for uciml/pima-indians-diabetes-database and summarize: total_bytes, license, usability_rating, current_version_number, files count.
-“List dataset files for zynicide/wine-reviews (page_size 10). Return just file names + totalBytes.”
+Get kaggle dataset info for uciml/pima-indians-diabetes-database and summarize: total_bytes, license, usability_rating, current_version_number, files count.
+List kaggle dataset files for zynicide/wine-reviews (page_size 10). Return just file names + totalBytes.
 “Search competitions for titanic and list the top 5 with deadline and evaluation_metric.”
 “Get competition metadata for titanic and show: max_daily_submissions, max_team_size, is_kernels_submissions_only, reward, deadline.”
 “Get the competition leaderboard for titanic (page_size 10). Show rank, team name, score.”
