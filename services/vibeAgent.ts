@@ -16,13 +16,17 @@ export interface AgentMessage {
 export type AgentToolType = 'load_skill' | 'load_skill_resource' | 'save_skill' | 'execute_python' | 'list_skills' | 'read_file' | 'add_cell' | 'edit_cell';
 
 export class VibeAgent {
-    private hfTools: any[] = [];
+    private mcpTools: any[] = [];
+    private mcpToolServerByName: Record<string, string> = {};
     private messages: AgentMessage[] = [];
     private onThinking: (text: string) => void;
     private onUpdateCells: (cells: CellData[]) => void;
     private currentCells: CellData[] = [];
     private baseUrl = "http://127.0.0.1:2000";
-    private mcpUrl = "http://127.0.0.1:1001";
+    private mcpServers = {
+        huggingface: "http://127.0.0.1:1001",
+        kaggle: "http://127.0.0.1:1002",
+    };
 
     constructor(
         cells: CellData[], 
@@ -35,19 +39,43 @@ export class VibeAgent {
     }
 
     async init() {
-        try {
-            const resp = await fetch(`${this.mcpUrl}/mcp/list`);
-            const data = await resp.json();
-            this.hfTools = data.tools || [];
-            console.log("VibeAgent loaded MCP tools:", this.hfTools.map((t: any) => t.name));
-        } catch (e) {
-            console.error("Failed to load MCP tools:", e);
+        const serversToLoad = [
+            { id: "huggingface", label: "Hugging Face MCP", url: this.mcpServers.huggingface },
+            { id: "kaggle", label: "Kaggle MCP", url: this.mcpServers.kaggle },
+        ];
+
+        this.mcpTools = [];
+        this.mcpToolServerByName = {};
+
+        for (const s of serversToLoad) {
+            try {
+                const resp = await fetch(`${s.url}/mcp/list`);
+                const data = await resp.json();
+                const tools = data.tools || [];
+                tools.forEach((t: any) => {
+                    if (!t?.name) return;
+                    this.mcpTools.push({ ...t, _mcpServerId: s.id, _mcpServerLabel: s.label });
+                    this.mcpToolServerByName[t.name] = s.url;
+                });
+            } catch (e) {
+                console.error(`Failed to load MCP tools from ${s.id}:`, e);
+            }
+        }
+
+        if (this.mcpTools.length > 0) {
+            console.log("VibeAgent loaded MCP tools:", this.mcpTools.map((t: any) => `${t._mcpServerId}:${t.name}`));
         }
 
         let mcpPrompt = "";
-        if (this.hfTools.length > 0) {
-            mcpPrompt = `\n\n### HUB TOOLS (Hugging Face MCP):\nYou have access to these NATIVE tools. Call them using <tool_use> tags:\n`;
-            this.hfTools.forEach((t: any) => {
+        const grouped: Record<string, any[]> = {};
+        this.mcpTools.forEach((t: any) => {
+            const key = t._mcpServerLabel || "MCP";
+            grouped[key] = grouped[key] || [];
+            grouped[key].push(t);
+        });
+        for (const label of Object.keys(grouped)) {
+            mcpPrompt += `\n\n### HUB TOOLS (${label}):\nYou have access to these NATIVE tools. Call them using <tool_use> tags:\n`;
+            grouped[label].forEach((t: any) => {
                 mcpPrompt += `- **${t.name}**: ${t.description}\n  Args: ${JSON.stringify(t.inputSchema)}\n`;
             });
         }
@@ -172,17 +200,17 @@ export class VibeAgent {
                 return await this.toolListSkills();
             default:
                 // Check if it's an MCP tool
-                const isMCP = this.hfTools.find((t: any) => t.name === name);
-                if (isMCP) {
-                    return await this.toolCallMCP(name, input);
+                const mcpServerUrl = this.mcpToolServerByName[name];
+                if (mcpServerUrl) {
+                    return await this.toolCallMCP(mcpServerUrl, name, input);
                 }
                 return { error: `Unknown tool: ${name}` };
         }
     }
 
-    private async toolCallMCP(name: string, arguments_obj: any) {
+    private async toolCallMCP(serverUrl: string, name: string, arguments_obj: any) {
         try {
-            const resp = await fetch(`${this.mcpUrl}/mcp/call`, {
+            const resp = await fetch(`${serverUrl}/mcp/call`, {
                 method: "POST", 
                 headers: { "Content-Type": "application/json" }, 
                 body: JSON.stringify({ name, arguments: arguments_obj })
