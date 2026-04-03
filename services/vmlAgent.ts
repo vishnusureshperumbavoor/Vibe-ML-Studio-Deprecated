@@ -33,6 +33,7 @@ export class VMLAgent {
   private mcpServers = {
     huggingface: "http://127.0.0.1:1001",
     kaggle: "http://127.0.0.1:1002",
+    roboflow: "http://127.0.0.1:1003",
   };
 
   constructor(
@@ -53,6 +54,7 @@ export class VMLAgent {
         url: this.mcpServers.huggingface,
       },
       { id: "kaggle", label: "Kaggle MCP", url: this.mcpServers.kaggle },
+      { id: "roboflow", label: "Roboflow MCP", url: this.mcpServers.roboflow },
     ];
 
     this.mcpTools = [];

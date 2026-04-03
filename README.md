@@ -16,3 +16,8 @@ node index.mjs
 cd kaggle-server
 npm install
 node index.mjs
+
+## Roboflow MCP Bridge
+cd roboflow-server
+npm install
+node index.mjs
