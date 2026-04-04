@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Play,
@@ -119,6 +119,10 @@ export default function App() {
   const [showManageSkills, setShowManageSkills] = useState(false);
   const [manageTab, setManageTab] = useState<"skills" | "connectors">("skills");
   const [selectedSkillName, setSelectedSkillName] = useState<string | null>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashFilter, setSlashFilter] = useState("");
+  const [slashHighlight, setSlashHighlight] = useState(0);
+  const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
 
@@ -277,11 +281,20 @@ export default function App() {
     setManageTab(tab);
     setShowManageSkills(true);
     setIsPlusMenuOpen(false);
+    setSlashMenuOpen(false);
+    setSlashFilter("");
     if (tab === "skills" && skills.length) {
       if (!selectedSkillName) {
         setSelectedSkillName(skills[0].name);
       }
     }
+  };
+
+  const handleSlashSelection = (skillName: string) => {
+    setPrompt(`/${skillName} `);
+    setSlashMenuOpen(false);
+    setSlashFilter("");
+    setSlashHighlight(0);
   };
 
   const handleTogglePlugin = (pluginId: string) => {
@@ -398,25 +411,36 @@ export default function App() {
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         isPlusMenuOpen &&
         plusMenuRef.current &&
-        !plusMenuRef.current.contains(event.target as Node)
+        !plusMenuRef.current.contains(target)
       ) {
         setIsPlusMenuOpen(false);
+      }
+      if (
+        slashMenuOpen &&
+        slashMenuRef.current &&
+        !slashMenuRef.current.contains(target)
+      ) {
+        setSlashMenuOpen(false);
+        setSlashFilter("");
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
-  }, [isPlusMenuOpen]);
+  }, [isPlusMenuOpen, slashMenuOpen]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setIsPlusMenuOpen(false);
         setShowManageSkills(false);
+        setSlashMenuOpen(false);
+        setSlashFilter("");
       }
     };
     window.addEventListener("keydown", handleEscape);
@@ -742,7 +766,58 @@ export default function App() {
     setThinking(null);
   };
 
+  const handlePromptChange = (next: string) => {
+    setPrompt(next);
+    if (!slashMenuOpen) return;
+    const lastSlash = next.lastIndexOf("/");
+    if (lastSlash === -1) {
+      setSlashMenuOpen(false);
+      setSlashFilter("");
+      return;
+    }
+    setSlashFilter(next.slice(lastSlash + 1));
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (slashMenuOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashHighlight((prev) =>
+          Math.min(prev + 1, Math.max(0, slashSkillOptions.length - 1)),
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashHighlight((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        if (slashSkillOptions.length) {
+          e.preventDefault();
+          handleSlashSelection(slashSkillOptions[slashHighlight].name);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        setSlashMenuOpen(false);
+        setSlashFilter("");
+        return;
+      }
+    }
+
+    if (
+      e.key === "/" &&
+      !slashMenuOpen &&
+      !isGenerating &&
+      !isAutoRunning
+    ) {
+      setSlashMenuOpen(true);
+      setIsPlusMenuOpen(false);
+      setSlashHighlight(0);
+      setSlashFilter("");
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmitPrompt();
@@ -751,6 +826,27 @@ export default function App() {
 
   const skillPreview = skills.slice(0, 3);
   const connectorPreview = connectorSettings.slice(0, 3);
+  const slashSkillOptions = useMemo(() => {
+    const term = slashFilter.trim().toLowerCase();
+    return skills.filter((skill) =>
+      skill.name.toLowerCase().includes(term),
+    );
+  }, [skills, slashFilter]);
+
+  useEffect(() => {
+    if (!slashMenuOpen) return;
+    setSlashHighlight(0);
+  }, [slashMenuOpen]);
+
+  useEffect(() => {
+    if (slashSkillOptions.length === 0) {
+      setSlashHighlight(0);
+      return;
+    }
+    setSlashHighlight((prev) =>
+      Math.min(prev, slashSkillOptions.length - 1),
+    );
+  }, [slashSkillOptions.length]);
 
   return (
     <div className="flex flex-col h-screen bg-[#0B090F] text-[#E2D8F0] font-sans selection:bg-purple-500/30">
@@ -1047,8 +1143,9 @@ export default function App() {
                           <p className="text-[11px] text-slate-400">
                             No connectors configured.
                           </p>
-                        )}
-                      </div>
+              )}
+            </div>
+
                     </div>
                     <div className="border-t border-white/5 px-4 py-3">
                       <button
@@ -1062,6 +1159,46 @@ export default function App() {
                 )}
               </div>
 
+              {slashMenuOpen && (
+                <div
+                  ref={slashMenuRef}
+                  className="absolute left-4 bottom-full mb-3 z-40 w-[320px] rounded-2xl border border-white/10 bg-[#09040F] shadow-2xl"
+                >
+                  <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
+                    Slash commands
+                  </div>
+                  <div className="max-h-56 overflow-y-auto px-2 pb-2 text-sm text-slate-200">
+                    {slashSkillOptions.length ? (
+                      slashSkillOptions.map((skill, index) => (
+                        <button
+                          key={skill.name}
+                          onClick={() => handleSlashSelection(skill.name)}
+                          onMouseEnter={() => setSlashHighlight(index)}
+                          className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                            index === slashHighlight
+                              ? "bg-purple-500/20 text-white"
+                              : "text-slate-200 hover:bg-white/5"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[13px]">
+                            <span>{skill.name}</span>
+                            <span className="text-[10px] uppercase text-slate-400">
+                              Skill
+                            </span>
+                          </div>
+                          <p className="text-[12px] text-slate-400">
+                            {skill.summary || "Personal skill"}
+                          </p>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-slate-500">
+                        Type to filter skills…
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
               {/* Mode Toggle Button */}
               <button
                 onClick={() =>
@@ -1091,7 +1228,7 @@ export default function App() {
 
               <textarea
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
+                onChange={(e) => handlePromptChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
                   mode === "agent"
