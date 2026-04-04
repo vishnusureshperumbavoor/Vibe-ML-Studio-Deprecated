@@ -24,3 +24,33 @@ export interface GeminiResponse {
   text: string;
   error?: string;
 }
+
+export type ConnectorHealthStatus = 'idle' | 'testing' | 'healthy' | 'error';
+
+export interface ConnectorConfig {
+  id: string;
+  label: string;
+  description: string;
+  url: string;
+  enabled: boolean;
+  status?: ConnectorHealthStatus;
+  statusMessage?: string;
+  tokenHint?: string;
+}
+
+export interface SkillInfo {
+  name: string;
+  summary?: string;
+  autoActivate: boolean;
+  instructions?: string;
+  showInstructions?: boolean;
+  loadingInstructions?: boolean;
+}
+
+export interface PluginDefinition {
+  id: string;
+  name: string;
+  description: string;
+  connectors: string[];
+  skills: string[];
+}

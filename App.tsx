@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Plus,
   Play,
@@ -13,7 +13,15 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
 import { Button } from "./components/Button";
-import { CellData, CellType, ExecutionMode } from "./types";
+import ManageSkillsPanel from "./components/ManageSkillsPanel";
+import {
+  CellData,
+  CellType,
+  ExecutionMode,
+  ConnectorConfig,
+  SkillInfo,
+  PluginDefinition,
+} from "./types";
 import {
   simulateCodeExecution,
   generateNotebookStructure,
@@ -21,6 +29,62 @@ import {
 } from "./services/aiService";
 import { VMLAgent } from "./services/vmlAgent";
 import { ThinkingView } from "./components/ThinkingView";
+
+const API_BASE = "http://127.0.0.1:2000";
+
+const INITIAL_CONNECTORS: ConnectorConfig[] = [
+  {
+    id: "huggingface",
+    label: "Hugging Face MCP",
+    description: "Local bridge for Hugging Face Hub tools (models/datasets).",
+    url: "http://127.0.0.1:1001",
+    enabled: true,
+    status: "idle",
+    tokenHint: "Set VITE_HF_TOKEN",
+  },
+  {
+    id: "kaggle",
+    label: "Kaggle MCP",
+    description: "Local bridge for Kaggle datasets, competitions, and notebooks.",
+    url: "http://127.0.0.1:1002",
+    enabled: true,
+    status: "idle",
+    tokenHint: "Set KAGGLE_API_TOKEN",
+  },
+  {
+    id: "roboflow",
+    label: "Roboflow MCP",
+    description: "Local Roboflow inference bridge (object detection/classification).",
+    url: "http://127.0.0.1:1003",
+    enabled: true,
+    status: "idle",
+    tokenHint: "Set ROBOFLOW_API_KEY",
+  },
+];
+
+const CONNECTOR_PLUGINS: PluginDefinition[] = [
+  {
+    id: "plugin-huggingface",
+    name: "Hugging Face Plugin",
+    description: "Expose Hugging Face search + metadata tools.",
+    connectors: ["huggingface"],
+    skills: ["huggingface"],
+  },
+  {
+    id: "plugin-kaggle",
+    name: "Kaggle Plugin",
+    description: "Surface Kaggle competitions/datasets/benchmarks.",
+    connectors: ["kaggle"],
+    skills: ["kaggle"],
+  },
+  {
+    id: "plugin-roboflow",
+    name: "Roboflow Plugin",
+    description: "Bundle Roboflow inference with helper instructions.",
+    connectors: ["roboflow"],
+    skills: ["roboflow"],
+  },
+];
 
 const INITIAL_CELLS: CellData[] = [];
 
@@ -38,8 +102,210 @@ export default function App() {
   const [thinking, setThinking] = useState<string | null>(null);
   const [thinkingHistory, setThinkingHistory] = useState<string[]>([]);
   const [activeTask, setActiveTask] = useState<string | null>(null);
+  const [connectorSettings, setConnectorSettings] =
+    useState<ConnectorConfig[]>(() => INITIAL_CONNECTORS);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [pluginStates, setPluginStates] = useState<Record<string, boolean>>(
+    () =>
+      CONNECTOR_PLUGINS.reduce((acc, plugin) => {
+        acc[plugin.id] = true;
+        return acc;
+      }, {} as Record<string, boolean>),
+  );
+  const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
+  const [activeMenuCategory, setActiveMenuCategory] =
+    useState<"skills" | "connectors">("skills");
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const [showManageSkills, setShowManageSkills] = useState(false);
+  const [manageTab, setManageTab] = useState<"skills" | "connectors">("skills");
+  const [selectedSkillName, setSelectedSkillName] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
+
+  const handleToggleConnector = (id: string) => {
+    setConnectorSettings((prev) =>
+      prev.map((connector) =>
+        connector.id === id
+          ? { ...connector, enabled: !connector.enabled }
+          : connector,
+      ),
+    );
+  };
+
+  const handleUpdateConnectorUrl = (id: string, url: string) => {
+    setConnectorSettings((prev) =>
+      prev.map((connector) =>
+        connector.id === id
+          ? { ...connector, url, status: "idle", statusMessage: "" }
+          : connector,
+      ),
+    );
+  };
+
+  const handleTestConnector = async (id: string) => {
+    setConnectorSettings((prev) =>
+      prev.map((connector) =>
+        connector.id === id
+          ? { ...connector, status: "testing", statusMessage: "Checking…" }
+          : connector,
+      ),
+    );
+    const target = connectorSettings.find((connector) => connector.id === id);
+    if (!target) return;
+    if (!target.url) {
+      setConnectorSettings((prev) =>
+        prev.map((connector) =>
+          connector.id === id
+            ? {
+                ...connector,
+                status: "error",
+                statusMessage: "URL is not set",
+                lastChecked: new Date().toLocaleTimeString(),
+              }
+            : connector,
+        ),
+      );
+      return;
+    }
+
+    try {
+      const cleanUrl = target.url.replace(/\/+$/, "");
+      const resp = await fetch(`${cleanUrl}/mcp/list`);
+      if (!resp.ok) {
+        throw new Error(`Status ${resp.status}`);
+      }
+      const data = await resp.json();
+      setConnectorSettings((prev) =>
+        prev.map((connector) =>
+          connector.id === id
+            ? {
+                ...connector,
+                status: "healthy",
+                statusMessage: `${(data.tools?.length ?? 0)} tools`,
+                lastChecked: new Date().toLocaleTimeString(),
+              }
+            : connector,
+        ),
+      );
+    } catch (error: any) {
+      setConnectorSettings((prev) =>
+        prev.map((connector) =>
+          connector.id === id
+            ? {
+                ...connector,
+                status: "error",
+                statusMessage: error?.message ?? "Connection failed",
+                lastChecked: new Date().toLocaleTimeString(),
+              }
+            : connector,
+        ),
+      );
+    }
+  };
+
+  const handleToggleSkillAutoActivate = (name: string) => {
+    setSkills((prev) =>
+      prev.map((skill) =>
+        skill.name === name
+          ? { ...skill, autoActivate: !skill.autoActivate }
+          : skill,
+      ),
+    );
+  };
+
+  const handleViewSkillInstructions = async (name: string) => {
+    setSkills((prev) =>
+      prev.map((skill) =>
+        skill.name === name
+          ? { ...skill, showInstructions: !skill.showInstructions }
+          : skill,
+      ),
+    );
+
+    const skill = skills.find((item) => item.name === name);
+    if (!skill || skill.instructions || skill.loadingInstructions) return;
+
+    setSkills((prev) =>
+      prev.map((item) =>
+        item.name === name ? { ...item, loadingInstructions: true } : item,
+      ),
+    );
+
+    try {
+      const resp = await fetch(`${API_BASE}/read_file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: `skills/${name}/SKILLS.md` }),
+      });
+      const data = await resp.json();
+      const instructions = data.content || "";
+      const summaryLine = instructions.split("\n")[0]?.trim() || "";
+      setSkills((prev) =>
+        prev.map((item) =>
+          item.name === name
+            ? {
+                ...item,
+                instructions,
+                summary: item.summary || summaryLine,
+                loadingInstructions: false,
+              }
+            : item,
+        ),
+      );
+    } catch (error: any) {
+      setSkills((prev) =>
+        prev.map((item) =>
+          item.name === name
+            ? {
+                ...item,
+                instructions: `Unable to load instructions: ${
+                  error?.message ?? "Unknown error"
+                }`,
+                loadingInstructions: false,
+              }
+            : item,
+        ),
+      );
+    }
+  };
+
+  const handleSelectSkill = (name: string) => {
+    setSelectedSkillName(name);
+  };
+
+  const openManagePanel = (tab: "skills" | "connectors" = "skills") => {
+    setManageTab(tab);
+    setShowManageSkills(true);
+    setIsPlusMenuOpen(false);
+    if (tab === "skills" && skills.length) {
+      if (!selectedSkillName) {
+        setSelectedSkillName(skills[0].name);
+      }
+    }
+  };
+
+  const handleTogglePlugin = (pluginId: string) => {
+    const plugin = CONNECTOR_PLUGINS.find((p) => p.id === pluginId);
+    if (!plugin) return;
+    setPluginStates((prev) => {
+      const nextState = !prev[pluginId];
+      setConnectorSettings((prevConnectors) =>
+        prevConnectors.map((connector) =>
+          plugin.connectors.includes(connector.id)
+            ? { ...connector, enabled: nextState }
+            : connector,
+        ),
+      );
+      setSkills((prevSkills) =>
+        prevSkills.map((skill) =>
+          plugin.skills.includes(skill.name)
+            ? { ...skill, autoActivate: nextState }
+            : skill,
+        ),
+      );
+      return { ...prev, [pluginId]: nextState };
+    });
+  };
 
   const syncQueryIndexes = (cells: CellData[]) => {
     const updated = queryHistoryRef.current
@@ -93,6 +359,71 @@ export default function App() {
   useEffect(() => {
     cellsRef.current = cells;
   }, [cells]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSkills = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/list_skills`);
+        if (!response.ok) throw new Error("Failed to fetch skills");
+        const data = await response.json();
+        const names = Array.isArray(data.skills) ? data.skills : [];
+        if (!cancelled) {
+          setSkills(
+            names.map((name) => ({
+              name,
+              summary: "",
+              autoActivate: true,
+              instructions: "",
+              showInstructions: false,
+              loadingInstructions: false,
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("Unable to load skills list", error);
+      }
+    };
+    loadSkills();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSkillName && skills.length > 0) {
+      setSelectedSkillName(skills[0].name);
+    }
+  }, [skills, selectedSkillName]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        isPlusMenuOpen &&
+        plusMenuRef.current &&
+        !plusMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsPlusMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isPlusMenuOpen]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsPlusMenuOpen(false);
+        setShowManageSkills(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   // Auto-scroll to bottom when new cells are added
   useEffect(() => {
@@ -343,6 +674,7 @@ export default function App() {
           setCells(mergedCells);
           cellsRef.current = mergedCells;
         },
+        connectorSettings,
       );
 
       try {
@@ -416,6 +748,9 @@ export default function App() {
       handleSubmitPrompt();
     }
   };
+
+  const skillPreview = skills.slice(0, 3);
+  const connectorPreview = connectorSettings.slice(0, 3);
 
   return (
     <div className="flex flex-col h-screen bg-[#0B090F] text-[#E2D8F0] font-sans selection:bg-purple-500/30">
@@ -560,10 +895,173 @@ export default function App() {
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
         <div className="max-w-3xl mx-auto pointer-events-auto">
           <div
-            className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-hidden flex flex-col ${isGenerating || isAutoRunning ? "border-purple-500 shadow-purple-500/20" : "border-[#352554] hover:border-gray-500"}`}
+            className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-visible flex flex-col ${isGenerating || isAutoRunning ? "border-purple-500 shadow-purple-500/20" : "border-[#352554] hover:border-gray-500"}`}
           >
             {/* Mode Selector and Input Area */}
             <div className="flex items-end p-2 gap-2">
+              {/* Quick actions menu */}
+              <div className="relative" ref={plusMenuRef}>
+                <button
+                  onClick={() => setIsPlusMenuOpen((prev) => !prev)}
+                  disabled={isGenerating || isAutoRunning}
+                  className={`mb-2 h-9 w-9 flex items-center justify-center rounded-full border transition ${
+                    isPlusMenuOpen
+                      ? "border-purple-400 text-purple-200"
+                      : "border-white/20 text-slate-300 hover:border-purple-500 hover:text-purple-200"
+                  } bg-[#140A1C]`}
+                >
+                  <Plus size={18} />
+                </button>
+
+                {isPlusMenuOpen && (
+                  <div className="absolute bottom-full left-0 z-30 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#08050D] shadow-2xl">
+                    <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
+                      <div className="flex items-center justify-between">
+                        <span>Quick actions</span>
+                        <span className="text-[10px] text-purple-300">
+                          {activeMenuCategory === "skills"
+                            ? "Skills"
+                            : "Connectors"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 border-t border-white/5 px-4 pb-4 pt-2">
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => setActiveMenuCategory("skills")}
+                          className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                            activeMenuCategory === "skills"
+                              ? "border border-purple-400/60 bg-purple-500/10 text-white"
+                              : "border border-white/10 text-slate-300 hover:border-white/40"
+                          }`}
+                        >
+                          Skills
+                        </button>
+                        <button
+                          onClick={() => setActiveMenuCategory("connectors")}
+                          className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                            activeMenuCategory === "connectors"
+                              ? "border border-purple-400/60 bg-purple-500/10 text-white"
+                              : "border border-white/10 text-slate-300 hover:border-white/40"
+                          }`}
+                        >
+                          Connectors
+                        </button>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        {activeMenuCategory === "skills" ? (
+                          skillPreview.length ? (
+                            skillPreview.map((skill) => (
+                              <div
+                                key={skill.name}
+                                className="rounded-2xl border border-white/5 bg-[#0F0B16]/90 p-3 text-xs text-slate-200"
+                                onClick={() => handleSelectSkill(skill.name)}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">
+                                      {skill.name}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400">
+                                      {skill.summary || "Personal skill"}
+                                    </p>
+                                  </div>
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleToggleSkillAutoActivate(skill.name);
+                                    }}
+                                    className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
+                                      skill.autoActivate
+                                        ? "border-emerald-400 text-emerald-300"
+                                        : "border-white/20 text-white/70"
+                                    }`}
+                                  >
+                                    Auto {skill.autoActivate ? "On" : "Off"}
+                                  </button>
+                                </div>
+                                <div className="mt-3 flex items-center justify-between text-[10px]">
+                                  <button
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleViewSkillInstructions(skill.name);
+                                    }}
+                                    className="text-slate-300 hover:text-white"
+                                  >
+                                    {skill.showInstructions
+                                      ? "Hide"
+                                      : "View instructions"}
+                                  </button>
+                                  <span className="text-[10px] text-slate-500">
+                                    SKILLS.md
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-[11px] text-slate-400">
+                              No skills loaded yet.
+                            </p>
+                          )
+                        ) : connectorPreview.length ? (
+                          connectorPreview.map((connector) => (
+                            <div
+                              key={connector.id}
+                              className="rounded-2xl border border-white/5 bg-[#0F0B16]/90 p-3 text-xs text-slate-200"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-white">
+                                    {connector.label}
+                                  </p>
+                                  <p className="text-[11px] text-slate-400">
+                                    {connector.description}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleToggleConnector(connector.id)}
+                                  className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
+                                    connector.enabled
+                                      ? "border-emerald-400 text-emerald-300"
+                                      : "border-white/20 text-white/70"
+                                  }`}
+                                >
+                                  {connector.enabled ? "On" : "Off"}
+                                </button>
+                              </div>
+                              <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
+                                <span className="font-semibold text-slate-200">
+                                  {connector.status || "Idle"}
+                                </span>
+                                <span>{connector.statusMessage}</span>
+                              </div>
+                              <button
+                                onClick={() => handleTestConnector(connector.id)}
+                                className="mt-2 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-white/40 hover:text-white"
+                              >
+                                Test
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[11px] text-slate-400">
+                            No connectors configured.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="border-t border-white/5 px-4 py-3">
+                      <button
+                        onClick={() => openManagePanel("skills")}
+                        className="w-full rounded-2xl border border-white/10 bg-purple-600/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:border-purple-400/80 hover:bg-purple-500/20"
+                      >
+                        Manage skills & connectors
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Mode Toggle Button */}
               <button
                 onClick={() =>
@@ -600,7 +1098,7 @@ export default function App() {
                     ? "Agent: Describe your task and I'll build and run it..."
                     : "Plan: Describe your task to see the architectural strategy..."
                 }
-                className="w-full bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
+                className="flex-1 bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
                 rows={1}
                 style={{ minHeight: "50px" }}
                 disabled={isGenerating || isAutoRunning}
@@ -634,6 +1132,24 @@ export default function App() {
           </div>
         </div>
       </div>
+      <ManageSkillsPanel
+        visible={showManageSkills}
+        onClose={() => setShowManageSkills(false)}
+        activeTab={manageTab}
+        onChangeTab={(tab) => setManageTab(tab)}
+        skills={skills}
+        connectors={connectorSettings}
+        pluginDefinitions={CONNECTOR_PLUGINS}
+        pluginStates={pluginStates}
+        selectedSkillName={selectedSkillName}
+        onSelectSkill={handleSelectSkill}
+        onToggleSkillAutoActivate={handleToggleSkillAutoActivate}
+        onViewSkillInstructions={handleViewSkillInstructions}
+        onToggleConnector={handleToggleConnector}
+        onUpdateConnectorUrl={handleUpdateConnectorUrl}
+        onTestConnector={handleTestConnector}
+        onTogglePlugin={handleTogglePlugin}
+      />
     </div>
   );
 }

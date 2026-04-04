@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { CellData, CellType } from "../types";
+import { CellData, CellType, ConnectorConfig } from "../types";
 import { callKimi, simulateCodeExecution } from "./aiService";
 import { VML_SYSTEM_PROMPT } from "./prompts/vmlSystemPrompt";
 
@@ -30,32 +30,31 @@ export class VMLAgent {
   private onThinking: (text: string) => void;
   private onUpdateCells: (cells: CellData[]) => void;
   private currentCells: CellData[] = [];
-  private mcpServers = {
-    huggingface: "http://127.0.0.1:1001",
-    kaggle: "http://127.0.0.1:1002",
-    roboflow: "http://127.0.0.1:1003",
-  };
+  private connectorConfigs: ConnectorConfig[] = [];
 
   constructor(
     cells: CellData[],
     onThinking: (text: string) => void,
     onUpdateCells: (cells: CellData[]) => void,
+    connectorConfigs: ConnectorConfig[] = [],
   ) {
     this.currentCells = cells;
     this.onThinking = onThinking;
     this.onUpdateCells = onUpdateCells;
+    this.connectorConfigs =
+      connectorConfigs.length > 0
+        ? connectorConfigs
+        : this.getDefaultConnectorConfigs();
   }
 
   async init() {
-    const serversToLoad = [
-      {
-        id: "huggingface",
-        label: "Hugging Face MCP",
-        url: this.mcpServers.huggingface,
-      },
-      { id: "kaggle", label: "Kaggle MCP", url: this.mcpServers.kaggle },
-      { id: "roboflow", label: "Roboflow MCP", url: this.mcpServers.roboflow },
-    ];
+    const serversToLoad = this.connectorConfigs
+      .filter((conn) => conn.enabled && conn.url)
+      .map((conn) => ({
+        id: conn.id,
+        label: conn.label,
+        url: conn.url,
+      }));
 
     this.mcpTools = [];
     this.mcpToolServerByName = {};
@@ -103,6 +102,32 @@ export class VMLAgent {
     // Initialize System Message with combined prompt
     this.messages = [
       { role: "system" as any, content: VML_SYSTEM_PROMPT + mcpPrompt },
+    ];
+  }
+
+  private getDefaultConnectorConfigs(): ConnectorConfig[] {
+    return [
+      {
+        id: "huggingface",
+        label: "Hugging Face MCP",
+        description: "Default Hugging Face bridge",
+        url: "http://127.0.0.1:1001",
+        enabled: true,
+      },
+      {
+        id: "kaggle",
+        label: "Kaggle MCP",
+        description: "Default Kaggle bridge",
+        url: "http://127.0.0.1:1002",
+        enabled: true,
+      },
+      {
+        id: "roboflow",
+        label: "Roboflow MCP",
+        description: "Default Roboflow bridge",
+        url: "http://127.0.0.1:1003",
+        enabled: true,
+      },
     ];
   }
 
