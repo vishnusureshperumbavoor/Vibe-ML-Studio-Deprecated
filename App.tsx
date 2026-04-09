@@ -23,7 +23,7 @@ import {
   PluginDefinition,
 } from "./types";
 import {
-  simulateCodeExecution,
+  executeCode,
   generateNotebookStructure,
   fixCodeError,
 } from "./services/aiService";
@@ -45,7 +45,8 @@ const INITIAL_CONNECTORS: ConnectorConfig[] = [
   {
     id: "kaggle",
     label: "Kaggle MCP",
-    description: "Local bridge for Kaggle datasets, competitions, and notebooks.",
+    description:
+      "Local bridge for Kaggle datasets, competitions, and notebooks.",
     url: "http://127.0.0.1:1002",
     enabled: true,
     status: "idle",
@@ -54,7 +55,8 @@ const INITIAL_CONNECTORS: ConnectorConfig[] = [
   {
     id: "roboflow",
     label: "Roboflow MCP",
-    description: "Local Roboflow inference bridge (object detection/classification).",
+    description:
+      "Local Roboflow inference bridge (object detection/classification).",
     url: "http://127.0.0.1:1003",
     enabled: true,
     status: "idle",
@@ -102,23 +104,30 @@ export default function App() {
   const [thinking, setThinking] = useState<string | null>(null);
   const [thinkingHistory, setThinkingHistory] = useState<string[]>([]);
   const [activeTask, setActiveTask] = useState<string | null>(null);
-  const [connectorSettings, setConnectorSettings] =
-    useState<ConnectorConfig[]>(() => INITIAL_CONNECTORS);
+  const [connectorSettings, setConnectorSettings] = useState<ConnectorConfig[]>(
+    () => INITIAL_CONNECTORS,
+  );
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [pluginStates, setPluginStates] = useState<Record<string, boolean>>(
     () =>
-      CONNECTOR_PLUGINS.reduce((acc, plugin) => {
-        acc[plugin.id] = true;
-        return acc;
-      }, {} as Record<string, boolean>),
+      CONNECTOR_PLUGINS.reduce(
+        (acc, plugin) => {
+          acc[plugin.id] = true;
+          return acc;
+        },
+        {} as Record<string, boolean>,
+      ),
   );
   const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
-  const [activeMenuCategory, setActiveMenuCategory] =
-    useState<"skills" | "connectors">("skills");
+  const [activeMenuCategory, setActiveMenuCategory] = useState<
+    "skills" | "connectors"
+  >("skills");
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const [showManageSkills, setShowManageSkills] = useState(false);
   const [manageTab, setManageTab] = useState<"skills" | "connectors">("skills");
-  const [selectedSkillName, setSelectedSkillName] = useState<string | null>(null);
+  const [selectedSkillName, setSelectedSkillName] = useState<string | null>(
+    null,
+  );
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState("");
   const [slashHighlight, setSlashHighlight] = useState(0);
@@ -185,7 +194,7 @@ export default function App() {
             ? {
                 ...connector,
                 status: "healthy",
-                statusMessage: `${(data.tools?.length ?? 0)} tools`,
+                statusMessage: `${data.tools?.length ?? 0} tools`,
                 lastChecked: new Date().toLocaleTimeString(),
               }
             : connector,
@@ -545,7 +554,7 @@ export default function App() {
     if (!cell) return { success: false, output: "Cell not found" };
 
     // Update output live
-    const localResult = await simulateCodeExecution(cell.content, (partial) => {
+    const localResult = await executeCode(cell.content, (partial) => {
       setCells((prev) =>
         prev.map((c) => (c.id === id ? { ...c, output: partial } : c)),
       );
@@ -806,12 +815,7 @@ export default function App() {
       }
     }
 
-    if (
-      e.key === "/" &&
-      !slashMenuOpen &&
-      !isGenerating &&
-      !isAutoRunning
-    ) {
+    if (e.key === "/" && !slashMenuOpen && !isGenerating && !isAutoRunning) {
       setSlashMenuOpen(true);
       setIsPlusMenuOpen(false);
       setSlashHighlight(0);
@@ -828,9 +832,7 @@ export default function App() {
   const connectorPreview = connectorSettings.slice(0, 3);
   const slashSkillOptions = useMemo(() => {
     const term = slashFilter.trim().toLowerCase();
-    return skills.filter((skill) =>
-      skill.name.toLowerCase().includes(term),
-    );
+    return skills.filter((skill) => skill.name.toLowerCase().includes(term));
   }, [skills, slashFilter]);
 
   useEffect(() => {
@@ -843,9 +845,7 @@ export default function App() {
       setSlashHighlight(0);
       return;
     }
-    setSlashHighlight((prev) =>
-      Math.min(prev, slashSkillOptions.length - 1),
-    );
+    setSlashHighlight((prev) => Math.min(prev, slashSkillOptions.length - 1));
   }, [slashSkillOptions.length]);
 
   return (
@@ -1115,7 +1115,9 @@ export default function App() {
                                   </p>
                                 </div>
                                 <button
-                                  onClick={() => handleToggleConnector(connector.id)}
+                                  onClick={() =>
+                                    handleToggleConnector(connector.id)
+                                  }
                                   className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
                                     connector.enabled
                                       ? "border-emerald-400 text-emerald-300"
@@ -1132,7 +1134,9 @@ export default function App() {
                                 <span>{connector.statusMessage}</span>
                               </div>
                               <button
-                                onClick={() => handleTestConnector(connector.id)}
+                                onClick={() =>
+                                  handleTestConnector(connector.id)
+                                }
                                 className="mt-2 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-white/40 hover:text-white"
                               >
                                 Test
@@ -1143,9 +1147,8 @@ export default function App() {
                           <p className="text-[11px] text-slate-400">
                             No connectors configured.
                           </p>
-              )}
-            </div>
-
+                        )}
+                      </div>
                     </div>
                     <div className="border-t border-white/5 px-4 py-3">
                       <button

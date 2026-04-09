@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { CellData, CellType, ConnectorConfig } from "../types";
-import { callKimi, simulateCodeExecution } from "./aiService";
+import { callKimi, executeCode } from "./aiService";
 import { VML_SYSTEM_PROMPT } from "./prompts/vmlSystemPrompt";
 
 /**
@@ -308,7 +308,7 @@ export class VMLAgent {
     this.currentCells = [...this.currentCells, newCell];
     this.onUpdateCells(this.currentCells);
 
-    const result = await simulateCodeExecution(code, (partial) => {
+    const result = await executeCode(code, (partial) => {
       this.currentCells = this.currentCells.map((c) =>
         c.id === cellId ? { ...c, output: partial } : c,
       );

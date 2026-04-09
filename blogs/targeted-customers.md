@@ -1,5 +1,5 @@
 1. The "Non-Coder" Subject Matter Expert (SME)
-Who: Radiologists, Quantitative Traders, Oil & Gas Engineers.
+Who: Radiologists, Quantitative Traders.
 The Problem: They have billions of dollars of high-value data but zero time/interest in learning PyTorch. They currently pay consultants $50k+ for a single model.
 The Value: VibeML Agents gives them a "Virtual Data Scientist" who speaks their domain language and builds tools they can actually use (the Deployed React UI).
 

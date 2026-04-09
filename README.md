@@ -13,11 +13,9 @@ cd hf-server
 node index.mjs
 
 ## Kaggle MCP Bridge (for VML Studio)
-cd kaggle-server
-npm install
+cd kaggle-server  
 node index.mjs
 
 ## Roboflow MCP Bridge
-cd roboflow-server
-npm install
+cd roboflow-server  
 node index.mjs

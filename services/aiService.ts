@@ -53,7 +53,7 @@ export async function callKimi(messages: any[], temperature = 0.1) {
   }
 }
 
-export const simulateCodeExecution = async (
+export const executeCode = async (
     code: string, 
     onProgress?: (text: string) => void
 ): Promise<GeminiResponse> => {
