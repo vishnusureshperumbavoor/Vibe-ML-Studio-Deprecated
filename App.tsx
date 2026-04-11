@@ -26,7 +26,6 @@ import {
 import {
   executeCode,
   generateNotebookStructure,
-  fixCodeError,
 } from "./services/aiService";
 import { VMLAgent } from "./services/vmlAgent";
 import { ThinkingView } from "./components/ThinkingView";
@@ -582,86 +581,6 @@ export default function App() {
       success: !localResult.error,
       output: localResult.error || localResult.text,
     };
-  };
-
-  /**
-   * Main Autonomous Loop
-   * Executes cells sequentially. If an error occurs, it attempts to fix it and retry.
-   */
-  const executeNotebook = async (startIndex: number = 0) => {
-    if (isAutoRunning) return;
-    setIsAutoRunning(true);
-    stopExecutionRef.current = false;
-
-    // Use a local index to iterate through the cells from the ref
-    // We re-read cellsRef.current.length every iteration in case cells are added/removed (though unlikely during auto-run)
-    for (let i = startIndex; i < cellsRef.current.length; i++) {
-      if (stopExecutionRef.current) break;
-
-      const cell = cellsRef.current[i];
-      if (cell.type !== "code") continue; // Skip markdown
-
-      // Scroll current cell into view
-      const el = document.getElementById(`cell-${cell.id}`); // Assuming we add ID to Cell component
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-      let attempts = 0;
-      const maxAttempts = 3;
-      let success = false;
-
-      while (!success && attempts < maxAttempts && !stopExecutionRef.current) {
-        attempts++;
-
-        // Run the cell
-        const result = await executeSingleCell(cell.id);
-
-        if (result.success) {
-          success = true;
-        } else {
-          // Agentic Auto-Recovery Detection
-          const isMissingModule =
-            result.output.includes("ModuleNotFoundError") ||
-            result.output.includes("ImportError");
-
-          if (attempts < maxAttempts) {
-            // Update Status to Recovering/Fixing
-            const statusType = isMissingModule ? "recovering" : "fixing";
-            setCells((prev) =>
-              prev.map((c) =>
-                c.id === cell.id ? { ...c, status: statusType as any } : c,
-              ),
-            );
-
-            // Get the fix from the Agent
-            const fixedCode = await fixCodeError(
-              cellsRef.current[i].content,
-              result.output,
-            );
-
-            // Update cell content with fix
-            setCells((prev) =>
-              prev.map((c) =>
-                c.id === cell.id ? { ...c, content: fixedCode } : c,
-              ),
-            );
-
-            // Wait a moment for visual clarity
-            await new Promise((r) => setTimeout(r, 1000));
-          }
-        }
-      }
-
-      // If we failed after max attempts, stop the chain
-      if (!success) {
-        setIsAutoRunning(false);
-        return;
-      }
-
-      // Short pause between cells for visual pacing
-      await new Promise((r) => setTimeout(r, 500));
-    }
-
-    setIsAutoRunning(false);
   };
 
   // Wrapper for manual single cell run
@@ -1268,9 +1187,7 @@ export default function App() {
                 disabled={(!prompt.trim() && !isGenerating) || isAutoRunning}
                 className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
                   (prompt.trim() || isGenerating) && !isAutoRunning
-                    ? isGenerating
-                      ? "bg-red-600 text-white hover:bg-red-700 shadow-sm"
-                      : "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
+                    ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
                     : "bg-[#1a1a1a] text-gray-500 cursor-not-allowed"
                 }`}
               >
