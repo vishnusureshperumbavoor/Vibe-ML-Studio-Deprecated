@@ -134,6 +134,7 @@ export default function App() {
   const [slashHighlight, setSlashHighlight] = useState(0);
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
 
@@ -515,8 +516,9 @@ export default function App() {
 
   const clearAll = () => {
     setCells([]);
-    cellsRef.current = [];
-    setActiveCellId(null);
+    setHistory([]);
+    setClarification(null);
+    setThinking(null);
     stopExecutionRef.current = true;
     setIsAutoRunning(false);
     queryHistoryRef.current = [];
@@ -719,11 +721,17 @@ export default function App() {
           cellsRef.current = mergedCells;
         },
         connectorSettings,
+        () => stopAgentRef.current,
       );
+
+      if (history.length > 0) {
+        agent.setHistory(history);
+      }
 
       try {
         await agent.init();
         await agent.process(userPrompt);
+        setHistory(agent.getHistory());
       } catch (error: any) {
         setCells((prev) => [
           ...prev,
@@ -881,7 +889,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">
-              VibeML Agent Studio
+              VML Agent Studio
             </h1>
             <span className="text-xs text-[#9480B3] flex items-center gap-2">
               {isAutoRunning ? (

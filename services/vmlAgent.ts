@@ -103,9 +103,19 @@ export class VMLAgent {
     }
 
     // Initialize System Message with combined prompt
-    this.messages = [
-      { role: "system" as any, content: VML_SYSTEM_PROMPT + mcpPrompt },
-    ];
+    if (this.messages.length === 0) {
+      this.messages = [
+        { role: "system" as any, content: VML_SYSTEM_PROMPT + mcpPrompt },
+      ];
+    }
+  }
+
+  setHistory(messages: AgentMessage[]) {
+    this.messages = messages;
+  }
+
+  getHistory(): AgentMessage[] {
+    return this.messages;
   }
 
   private getDefaultConnectorConfigs(): ConnectorConfig[] {
