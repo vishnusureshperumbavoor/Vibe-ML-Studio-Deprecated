@@ -9,6 +9,7 @@ import {
   Zap,
   Map,
   Rocket,
+  Square,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -134,6 +135,7 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const stopExecutionRef = useRef(false);
+  const stopAgentRef = useRef(false);
 
   const handleToggleConnector = (id: string) => {
     setConnectorSettings((prev) =>
@@ -667,13 +669,22 @@ export default function App() {
 
   const handleStop = () => {
     stopExecutionRef.current = true;
+    stopAgentRef.current = true;
     setIsAutoRunning(false);
+    setIsGenerating(false);
+    setThinking(null);
   };
 
   const handleSubmitPrompt = async () => {
-    if (!prompt.trim() || isGenerating) return;
+    if (isGenerating) {
+      handleStop();
+      return;
+    }
+    if (!prompt.trim()) return;
     setIsGenerating(true);
     setThinking("Analysing your request and preparing a plan...");
+    setClarification(null);
+    stopAgentRef.current = false;
 
     const userPrompt = prompt;
     setPrompt("");
@@ -1245,16 +1256,18 @@ export default function App() {
               />
 
               <button
-                onClick={handleSubmitPrompt}
-                disabled={!prompt.trim() || isGenerating || isAutoRunning}
+                onClick={isGenerating ? handleStop : handleSubmitPrompt}
+                disabled={(!prompt.trim() && !isGenerating) || isAutoRunning}
                 className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
-                  prompt.trim() && !isGenerating && !isAutoRunning
-                    ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
+                  (prompt.trim() || isGenerating) && !isAutoRunning
+                    ? isGenerating
+                      ? "bg-red-600 text-white hover:bg-red-700 shadow-sm"
+                      : "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
                     : "bg-[#1a1a1a] text-gray-500 cursor-not-allowed"
                 }`}
               >
                 {isGenerating ? (
-                  <div className="animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full" />
+                  <Square size={18} fill="currentColor" />
                 ) : (
                   <Send size={18} />
                 )}

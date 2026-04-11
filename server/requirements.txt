@@ -20,3 +20,7 @@ matplotlib>=3.8.0
 mcp
 python-dotenv
 huggingface_hub
+transformers
+accelerate
+bitsandbytes
+sentencepiece

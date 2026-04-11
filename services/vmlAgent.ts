@@ -31,12 +31,14 @@ export class VMLAgent {
   private onUpdateCells: (cells: CellData[]) => void;
   private currentCells: CellData[] = [];
   private connectorConfigs: ConnectorConfig[] = [];
+  private shouldStop: () => boolean;
 
   constructor(
     cells: CellData[],
     onThinking: (text: string) => void,
     onUpdateCells: (cells: CellData[]) => void,
     connectorConfigs: ConnectorConfig[] = [],
+    shouldStop: () => boolean = () => false,
   ) {
     this.currentCells = cells;
     this.onThinking = onThinking;
@@ -45,6 +47,7 @@ export class VMLAgent {
       connectorConfigs.length > 0
         ? connectorConfigs
         : this.getDefaultConnectorConfigs();
+    this.shouldStop = shouldStop;
   }
 
   async init() {
@@ -141,6 +144,10 @@ export class VMLAgent {
     const maxTurns = 20;
 
     while (!isDone && turns < maxTurns) {
+      if (this.shouldStop()) {
+        console.log("VMLAgent: Stop signal received. Exiting process loop.");
+        break;
+      }
       turns++;
       const response = await callKimi(this.messages as any, 0.2);
       this.messages.push({ role: "assistant", content: response });
