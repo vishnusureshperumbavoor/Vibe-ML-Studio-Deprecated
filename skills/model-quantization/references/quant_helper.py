@@ -65,6 +65,56 @@ class VMLQuantOptimizer:
             "model": model_id_or_path
         }
 
+    @classmethod
+    def convert_to_gguf(cls, model_path, output_path, out_type="q4_k_m"):
+        """
+        Converts a Hugging Face model to GGUF format using llama.cpp conversion scripts.
+        """
+        import os
+        import sys
+        import subprocess
+        import urllib.request
+
+        print(f"Starting GGUF conversion for {model_path}...")
+        
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        
+        # Define conversion script local path
+        script_path = os.path.join(os.path.dirname(__file__), "convert.py")
+        
+        # Fallback: Download convert.py if missing (from llama.cpp official)
+        if not os.path.exists(script_path):
+            print("Downloading conversion script from llama.cpp...")
+            url = "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert.py"
+            try:
+                urllib.request.urlretrieve(url, script_path)
+            except Exception as e:
+                return {"error": f"Failed to download conversion script: {e}"}
+
+        # Run conversion
+        try:
+            # We need to ensure dependencies for convert.py are met
+            # convert.py usually needs 'gguf' and 'sentencepiece'
+            cmd = [sys.executable, script_path, model_path, "--outfile", output_path, "--outtype", out_type]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                # If dependencies are missing, try to install them on the fly
+                if "ModuleNotFoundError" in result.stderr:
+                    print("Installing conversion dependencies (gguf, sentencepiece)...")
+                    subprocess.run([sys.executable, "-m", "pip", "install", "gguf", "sentencepiece", "numpy"])
+                    # Retry
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                
+            if result.returncode == 0:
+                return {"success": True, "path": os.path.abspath(output_path)}
+            else:
+                return {"error": f"Conversion failed: {result.stderr}"}
+                
+        except Exception as e:
+            return {"error": f"GGUF Conversion failed: {str(e)}"}
+
     @staticmethod
     def generate_modelfile(gguf_path, system_prompt="You are a Vibe-ML optimized assistant."):
         """Generates an Ollama Modelfile."""

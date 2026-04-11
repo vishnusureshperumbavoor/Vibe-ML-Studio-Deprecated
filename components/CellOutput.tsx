@@ -67,47 +67,73 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) 
             {output}
          </div>
       ) : output ? (
-         // Standard Output
-         <div className="pt-2 border-t border-[#352554]/50 mt-2">
-            <div className="font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto max-h-[500px] custom-scrollbar px-2 opacity-90">
-                {output.split('\n').map((line, i) => {
-                    const imgMatch = line.match(/\[IMAGE:\s*(.*?)\]/);
-                    if (imgMatch) {
-                        const source = imgMatch[1].trim();
-                        const isUrl = source.startsWith('http://') || source.startsWith('https://');
-                        const imgSrc = isUrl ? source : `http://127.0.0.1:2000/images/${source}?t=${Date.now()}`;
+          // Standard Output
+          <div className="pt-2 border-t border-[#352554]/50 mt-2">
+             <div className="font-mono text-sm text-gray-300 whitespace-pre-wrap overflow-x-auto max-h-[500px] custom-scrollbar px-2 opacity-90">
+                 {output.split('\n').map((line, i) => {
+                     // 1. Detect Image Tags
+                     const imgMatch = line.match(/\[IMAGE:\s*(.*?)\]/);
+                     if (imgMatch) {
+                         const source = imgMatch[1].trim();
+                         const isUrl = source.startsWith('http://') || source.startsWith('https://');
+                         const imgSrc = isUrl ? source : `http://127.0.0.1:2000/images/${source}?t=${Date.now()}`;
+ 
+                         return (
+                             <div key={i} className="my-4 bg-[#140F1D] rounded-xl overflow-hidden border border-[#352554] shadow-2xl max-w-2xl mx-auto">
+                                 <div className="p-2 border-b border-[#352554] bg-[#0B090F] flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-tighter">
+                                     <span className="flex items-center gap-1.5 font-bold text-purple-400">
+                                         <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                                         {isUrl ? 'EXTERNAL_IMAGE' : `RENDERED_OUTPUT: ${source}`}
+                                     </span>
+                                     <a 
+                                         href={imgSrc} 
+                                         target="_blank" 
+                                         rel="noreferrer"
+                                         className="hover:text-white transition-colors"
+                                     >
+                                         OPEN_ORIGINAL
+                                     </a>
+                                 </div>
+                                 <img 
+                                     src={imgSrc} 
+                                     alt={source}
+                                     className="w-full h-auto object-contain bg-black min-h-[100px]"
+                                     onError={(e) => {
+                                         (e.target as any).src = `https://via.placeholder.com/600x400?text=Error_Loading_Image_${encodeURIComponent(source)}`;
+                                     }}
+                                 />
+                             </div>
+                         );
+                     }
 
-                        return (
-                            <div key={i} className="my-4 bg-[#140F1D] rounded-xl overflow-hidden border border-[#352554] shadow-2xl max-w-2xl mx-auto">
-                                <div className="p-2 border-b border-[#352554] bg-[#0B090F] flex items-center justify-between text-[10px] text-gray-500 uppercase tracking-tighter">
-                                    <span className="flex items-center gap-1.5 font-bold text-purple-400">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                                        {isUrl ? 'EXTERNAL_IMAGE' : `RENDERED_OUTPUT: ${source}`}
-                                    </span>
-                                    <a 
-                                        href={imgSrc} 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="hover:text-white transition-colors"
-                                    >
-                                        OPEN_ORIGINAL
-                                    </a>
-                                </div>
-                                <img 
-                                    src={imgSrc} 
-                                    alt={source}
-                                    className="w-full h-auto object-contain bg-black min-h-[100px]"
-                                    onError={(e) => {
-                                        (e.target as any).src = `https://via.placeholder.com/600x400?text=Error_Loading_Image_${encodeURIComponent(source)}`;
-                                    }}
-                                />
-                            </div>
-                        );
-                    }
-                    return <div key={i}>{line}</div>;
-                })}
-            </div>
-         </div>
+                     // 2. Detect tqdm Progress Bars (e.g., 97%|#########7| 282/290 [00:14<00:00...])
+                     const progressMatch = line.match(/^\s*(.*?):\s*(\d+)%\|.*?\|\s*(\d+)\/(\d+)\s*\[(.*?)\]/);
+                     if (progressMatch) {
+                         const [_, label, percentage, current, total, stats] = progressMatch;
+                         return (
+                             <div key={i} className="my-3 max-w-xl bg-[#140F1D] border border-purple-500/30 p-4 rounded-xl shadow-lg animate-in zoom-in-95 duration-300">
+                                 <div className="flex items-center justify-between mb-2">
+                                     <span className="text-xs font-bold text-purple-300 uppercase tracking-widest">{label || 'Optimizing'}</span>
+                                     <span className="text-xs font-mono text-purple-400">{percentage}%</span>
+                                 </div>
+                                 <div className="h-2 w-full bg-[#0B090F] rounded-full overflow-hidden border border-purple-500/20">
+                                     <div 
+                                         className="h-full bg-gradient-to-r from-purple-600 via-indigo-500 to-emerald-400 transition-all duration-500" 
+                                         style={{ width: `${percentage}%` }}
+                                     />
+                                 </div>
+                                 <div className="flex items-center justify-between mt-2 text-[10px] font-mono text-gray-500">
+                                     <span>{current} / {total} units</span>
+                                     <span>{stats}</span>
+                                 </div>
+                             </div>
+                         );
+                     }
+
+                     return <div key={i} className={line.includes('Loading weights') ? 'hidden' : ''}>{line}</div>;
+                 })}
+             </div>
+          </div>
       ) : null}
     </div>
   );

@@ -86,9 +86,62 @@ export const executeCode = async (
                         const jsonStr = line.trim().slice(6);
                         const data = JSON.parse(jsonStr);
                         
-                        // Capture even partial output
+                        // Advanced Virtual Terminal Emulation
                         if (data.output !== undefined) {
-                            fullOutput += data.output;
+                            let chunk = data.output;
+                            
+                            // Initialize lines if this is the first output for this cell
+                            if (fullOutput === "") {
+                                (window as any)._vml_term_lines = [""];
+                                (window as any)._vml_term_cursorY = 0;
+                            }
+                            
+                            let lines = (window as any)._vml_term_lines as string[];
+                            let cursorY = (window as any)._vml_term_cursorY as number;
+
+                            // Handle ANSI Escape Codes and Control Characters
+                            // Check for \x1b[A (Cursor Up)
+                            while (chunk.includes('\x1b[A')) {
+                                const idx = chunk.indexOf('\x1b[A');
+                                const pre = chunk.slice(0, idx);
+                                processText(pre);
+                                cursorY = Math.max(0, cursorY - 1);
+                                chunk = chunk.slice(idx + 3);
+                            }
+
+                            function processText(text: string) {
+                                let parts = text.split('\r');
+                                for (let i = 0; i < parts.length; i++) {
+                                    if (i > 0 || text.startsWith('\r')) {
+                                        // Carriage Return: Clear the line at the current cursorY
+                                        lines[cursorY] = "";
+                                    }
+                                    
+                                    let subParts = parts[i].split('\n');
+                                    for (let j = 0; j < subParts.length; j++) {
+                                        if (j > 0) {
+                                            cursorY++;
+                                            if (!lines[cursorY]) lines[cursorY] = "";
+                                        }
+                                        lines[cursorY] += subParts[j];
+                                    }
+                                }
+                            }
+
+                            processText(chunk);
+
+                            // Update global state
+                            (window as any)._vml_term_lines = lines;
+                            (window as any)._vml_term_cursorY = cursorY;
+                            
+                            // Keep only the last 100 lines for performance
+                            if (lines.length > 200) {
+                                const removeCount = lines.length - 100;
+                                (window as any)._vml_term_lines = lines.slice(removeCount);
+                                (window as any)._vml_term_cursorY = Math.max(0, cursorY - removeCount);
+                            }
+
+                            fullOutput = (window as any)._vml_term_lines.join('\n');
                             if (onProgress) onProgress(fullOutput);
                         }
                         

@@ -1,4 +1,4 @@
-Download Qwen/Qwen2-0.5B-Instruct and quantize it for my Ollama.
+Download Qwen/Qwen2-0.5B-Instruct and quantize it
 
 Display image https://post.healthline.com/wp-content/uploads/2022/01/CT-scan-of-the-brain-body5.jpg
 

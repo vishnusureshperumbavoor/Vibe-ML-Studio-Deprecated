@@ -10,6 +10,7 @@ import {
   Map,
   Rocket,
   Square,
+  Activity,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -103,7 +104,6 @@ export default function App() {
   const [mode, setMode] = useState<ExecutionMode>("agent");
   const [thinking, setThinking] = useState<string | null>(null);
   const [thinkingHistory, setThinkingHistory] = useState<string[]>([]);
-  const [activeTask, setActiveTask] = useState<string | null>(null);
   const [connectorSettings, setConnectorSettings] = useState<ConnectorConfig[]>(
     () => INITIAL_CONNECTORS,
   );
@@ -134,8 +134,25 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string}>({ status: 'testing' });
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
+
+  const checkOllamaStatus = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/ollama_status`);
+      const data = await resp.json();
+      setOllamaStatus(data);
+    } catch (err) {
+      setOllamaStatus({ status: 'offline', message: 'Backend unreachable' });
+    }
+  };
+
+  useEffect(() => {
+    checkOllamaStatus();
+    const interval = setInterval(checkOllamaStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleToggleConnector = (id: string) => {
     setConnectorSettings((prev) =>
@@ -663,7 +680,6 @@ export default function App() {
         ]);
       } finally {
         setIsGenerating(false);
-        setThinking(null);
       }
       return;
     }
@@ -675,7 +691,6 @@ export default function App() {
       // Handle clarification
       setClarification(result.clarification);
       setIsGenerating(false);
-      setThinking(null);
       return;
     }
 
@@ -710,7 +725,6 @@ export default function App() {
       }
     }
     setIsGenerating(false);
-    setThinking(null);
   };
 
   const handlePromptChange = (next: string) => {
@@ -792,6 +806,7 @@ export default function App() {
         content={thinking}
         isVisible={!!thinking}
         history={thinkingHistory}
+        onClose={() => setThinking(null)}
       />
 
       {/* Top Header - Minimalist */}
@@ -836,6 +851,25 @@ export default function App() {
           >
             <Trash2 size={16} />
           </Button>
+          <div className="h-4 w-px bg-[#352554] mx-2"></div>
+          
+          {/* Ollama Status Badge */}
+          <div 
+            className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold transition-all duration-300 ${
+              ollamaStatus.status === 'online' 
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]" 
+                : ollamaStatus.status === 'testing'
+                ? "border-purple-500/30 bg-purple-500/10 text-purple-400"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+            }`}
+            title={ollamaStatus.message || `Ollama ${ollamaStatus.version || ''}`}
+          >
+            <Activity size={10} className={ollamaStatus.status === 'online' ? "animate-pulse" : ""} />
+            <span className="tracking-widest uppercase">
+              Ollama: {ollamaStatus.status === 'testing' ? 'Checking' : ollamaStatus.status}
+            </span>
+          </div>
+
           {isAutoRunning && (
             <>
               <div className="h-4 w-px bg-[#352554] mx-2"></div>
@@ -1172,9 +1206,11 @@ export default function App() {
                 onChange={(e) => handlePromptChange(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={
-                  mode === "agent"
-                    ? "Agent: Describe your task and I'll build and run it..."
-                    : "Plan: Describe your task to see the architectural strategy..."
+                  isGenerating || isAutoRunning
+                    ? "VML Agent is running..."
+                    : mode === "agent"
+                    ? "How can VML Agent help you today?"
+                    : "How can VML Planner help you today?"
                 }
                 className="flex-1 bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
                 rows={1}
@@ -1201,9 +1237,9 @@ export default function App() {
 
             {/* Loading Progress Bar */}
             {(isGenerating || isAutoRunning) && (
-              <div className="h-1 w-full bg-[#1a1a1a] overflow-hidden">
+              <div className="absolute bottom-2 left-4 right-4 h-0.5 bg-white/5 overflow-hidden rounded-full pointer-events-none">
                 <div
-                  className={`h-full ${isGenerating ? "bg-purple-500" : "bg-emerald-500"} animate-progress-indeterminate`}
+                  className={`h-full ${isGenerating ? "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"} animate-progress-indeterminate`}
                 ></div>
               </div>
             )}

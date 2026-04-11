@@ -48,10 +48,29 @@ class FileWriteRequest(BaseModel):
 from fastapi.responses import StreamingResponse
 import json
 
+def get_skill_paths():
+    """Scans the skills directory and returns all 'references' subfolders."""
+    paths = []
+    skills_root = os.path.join(PROJECT_ROOT, "skills")
+    if not os.path.exists(skills_root):
+        return paths
+        
+    for skill in os.listdir(skills_root):
+        ref_path = os.path.join(skills_root, skill, "references")
+        if os.path.exists(ref_path):
+            paths.append(os.path.abspath(ref_path).replace("\\", "/"))
+    return paths
+
 @app.post("/execute")
 async def execute_code(req: ExecuteRequest):
     code_lines = req.code.splitlines()
-    python_code_lines = ["import os, sys"] # Ensure common libs imported
+    
+    # Automatic Skill Linking: Include all skill reference paths in sys.path
+    skill_paths = get_skill_paths()
+    python_code_lines = [
+        "import os, sys",
+        f"sys.path.extend({json.dumps(skill_paths)})"
+    ]
     
     # 1. Intercept "Magic Pip" Commands and convert others to os.system
     BUILT_INS = {"os", "sys", "urllib", "zipfile", "zipfile36", "tarfile", "time", "json", "math", "re", "shutil", "tempfile", "requests"}
@@ -92,13 +111,13 @@ async def execute_code(req: ExecuteRequest):
             
             is_gradio = False
             
-            # Read output line by line as it arrives
+            # Read output in chunks as it arrives to capture \r for progress bars
             while True:
-                line_bytes = await process.stdout.readline()
-                if not line_bytes:
+                chunk_bytes = await process.stdout.read(1024)
+                if not chunk_bytes:
                     break
                     
-                line = line_bytes.decode('utf-8', errors='replace')
+                line = chunk_bytes.decode('utf-8', errors='replace')
                 
                 # Detect Gradio startup
                 if "Running on local URL" in line:
@@ -195,6 +214,26 @@ async def save_skill(req: FileWriteRequest):
         return {"success": True, "path": abs_path}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ollama_status")
+async def ollama_status():
+    """
+    Checks if the local Ollama service is running by polling the /api/tags endpoint.
+    """
+    try:
+        import requests
+        # Poll the Ollama API with a short timeout
+        response = requests.get("http://127.0.0.1:11434/api/tags", timeout=1)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "status": "online", 
+                "models": data.get("models", []),
+                "version": response.headers.get("x-ollama-version", "unknown")
+            }
+        return {"status": "warning", "message": "Ollama responded with an error"}
+    except Exception:
+        return {"status": "offline", "message": "Ollama service is not reachable"}
 
 @app.get("/images/{filename}")
 async def get_image(filename: str):

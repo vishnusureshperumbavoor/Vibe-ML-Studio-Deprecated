@@ -5,20 +5,24 @@
 ## Autonomous Optimization Protocol
 When a user asks to quantize a model, follow these steps:
 
-1. **Discovery (Generic)**: Use the `model_search` tool if the user provides a vague name. **DO NOT ask for permission** to choose a model unless multiple vastly different choices exist.
-2. **Technical Decision (Mandatory)**: 
-   - **Always choose GGUF/Ollama** for CPU-only systems (128MB VRAM). 
-   - **DO NOT download GPTQ/AWQ versions** as they will fail on CPU.
-   - **DO NOT ask for clarification** on formatting choices—autonomous execution is the priority in VML.
-3. **Setup**: Load the `<load_skill_resource>{"skill": "model-quantization", "path": "quant_helper.py"}</load_skill_resource>`.
-3. **Execution (Any Model)**:
-   - Use `huggingface_hub.snapshot_download` to pull the weights.
-   - Use `VMLQuantOptimizer` to benchmark and prepare the conversion.
-   - **DO NOT hardcode model names**—always use the ID provided in the prompt.
-4. **Integration**:
-   - Generate a customized `Modelfile`.
-   - Run `ollama create` via the `quant_helper` or a subprocess.
-5. **Validation**: Test the newly imported model in the notebook to confirm it works.
+2. **Skill Loading**: You can import the quantization helper directly. The platform automatically handles all paths.
+   ```python
+   from quant_helper import VMLQuantOptimizer
+   ```
+3. **Download Protocol (STRICT)**:
+   - **DO NOT USE `!git clone`**. It is slow and prone to errors.
+   - **DO NOT USE `!wget`** or manual downloads for weights.
+   - **ALWAYS USE `huggingface_hub.snapshot_download`**. It handles resumable downloads and caching perfectly.
+   - **ALWAYS USE `./data/`** as your base directory for all weights and GGUF files.
+   ```python
+   import huggingface_hub
+   repo_path = huggingface_hub.snapshot_download(model_id, local_dir=f"./data/{model_id.replace('/', '_')}")
+   ```
+4. **Execution Protocol**:
+   - Use `VMLQuantOptimizer.convert_to_gguf(repo_path, out_gguf_path)` to generate the GGUF file.
+   - Use `VMLQuantOptimizer.import_to_ollama(name, out_gguf_path)` to integrate with Ollama.
+   - **MANDATORY**: A task is ONLY complete when the model is imported to Ollama.
+   - **FORBIDDEN**: Do not print raw "Tensor" arrays or "Working on CPU" messages as proof of completion. These are "Fake" successes.
 
 ## Implementation Patterns & Guidelines
 
