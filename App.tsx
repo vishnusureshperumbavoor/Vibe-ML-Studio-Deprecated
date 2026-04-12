@@ -145,9 +145,9 @@ export default function App() {
     try {
       const resp = await fetch(`${API_BASE}/ollama_status`);
       const data = await resp.json();
-      setOllamaStatus(data);
+      setOllamaStatus(prev => ({ ...prev, ...data }));
     } catch (err) {
-      setOllamaStatus({ status: 'offline', message: 'Backend unreachable' });
+      setOllamaStatus(prev => ({ ...prev, status: 'offline', message: 'Backend unreachable' }));
     }
   };
 
@@ -875,38 +875,6 @@ export default function App() {
               <MessageSquare size={14} />
               <span>Chat</span>
             </button>
-          </div>
-          
-          <div className="h-4 w-px bg-[#352554] mx-2"></div>
-          
-          {/* Ollama Status Badge */}
-          <div 
-            className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold transition-all duration-300 ${
-              ollamaStatus.status === 'online' 
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]" 
-                : ollamaStatus.status === 'testing'
-                ? "border-purple-500/30 bg-purple-500/10 text-purple-400"
-                : "border-amber-500/30 bg-amber-500/10 text-amber-400"
-            }`}
-            title={ollamaStatus.message || `Ollama ${ollamaStatus.version || ''}`}
-          >
-            <Activity size={10} className={ollamaStatus.status === 'online' ? "animate-pulse" : ""} />
-            <select
-              value={ollamaStatus.models?.some(m => m.name === (ollamaStatus.selectedModel || '')) ? ollamaStatus.selectedModel : (ollamaStatus.models?.[0]?.name || '')}
-              onChange={(e) => setOllamaStatus(prev => ({ ...prev, selectedModel: e.target.value }))}
-              className="bg-transparent border-none text-[10px] uppercase tracking-widest font-bold focus:outline-none cursor-pointer"
-              disabled={ollamaStatus.status !== 'online' || !ollamaStatus.models?.length}
-            >
-              {ollamaStatus.status === 'online' && ollamaStatus.models?.length ? (
-                ollamaStatus.models.map((m: any) => (
-                  <option key={m.name} value={m.name} className="bg-[#140F1D] text-white">
-                    {m.name.toUpperCase()}
-                  </option>
-                ))
-              ) : (
-                <option>{ollamaStatus.status === 'testing' ? 'Checking...' : 'Ollama Offline'}</option>
-              )}
-            </select>
           </div>
 
           {isAutoRunning && (

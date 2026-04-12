@@ -32,7 +32,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
 
   useEffect(() => {
     if (ollamaModels.length > 0 && !selectedModel) {
@@ -40,12 +42,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   }, [ollamaModels, selectedModel, onModelChange]);
 
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      isNearBottomRef.current = isNearBottom;
+    }
+  };
+
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (isNearBottomRef.current) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   const handleSend = async () => {
@@ -70,7 +84,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
       if (!response.body) return;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let assistantContent = '';
       let buffer = ''; // Buffer for partial JSON chunks
       
       // Add initial empty assistant message
@@ -132,17 +145,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-900/10 blur-[120px] rounded-full pointer-events-none" />
 
       {/* Header / Model Selector */}
-      <div className="flex-none h-16 border-b border-[#352554]/50 bg-[#140F1D]/50 backdrop-blur-md px-6 flex items-center justify-between z-10">
+      <div className="flex-none shrink-0 h-16 border-b border-[#352554]/50 bg-[#140F1D]/50 backdrop-blur-md px-6 flex items-center justify-between z-10 w-full">
         <div className="flex items-center gap-4">
           <div className="p-2 bg-purple-500/10 rounded-lg border border-purple-500/20">
             <MessageSquare className="text-purple-400" size={18} />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-[#E2D8F0]">AI Chat Interface</h2>
+            <h2 className="text-sm font-semibold text-[#E2D8F0]">VML Arena</h2>
             <div className="flex items-center gap-2">
               <div className={`w-1.5 h-1.5 rounded-full ${isOllamaOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
               <span className="text-[10px] text-[#9480B3] uppercase tracking-widest font-bold">
-                {isOllamaOnline ? 'Ollama Ready' : 'Ollama Offline'}
+                {isOllamaOnline ? 'VML Ready' : 'VML Offline'}
               </span>
             </div>
           </div>
@@ -183,7 +196,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto w-full scroll-smooth custom-scrollbar relative z-0">
+      <div 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto w-full scroll-smooth custom-scrollbar relative z-0"
+      >
         <div className={`max-w-3xl mx-auto px-6 space-y-10 ${messages.length === 0 ? 'h-full flex items-center justify-center' : 'py-12'}`}>
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center space-y-8 opacity-60 animate-in fade-in zoom-in duration-700">
