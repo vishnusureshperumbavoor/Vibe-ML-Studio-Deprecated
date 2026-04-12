@@ -66,7 +66,7 @@ class VMLQuantOptimizer:
         }
 
     @classmethod
-    def convert_to_gguf(cls, model_path, output_path, out_type="q4_k_m"):
+    def convert_to_gguf(cls, model_path, output_path, out_type="f16"):
         """
         Converts a Hugging Face model to GGUF format using llama.cpp conversion scripts.
         """
@@ -81,12 +81,12 @@ class VMLQuantOptimizer:
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         
         # Define conversion script local path
-        script_path = os.path.join(os.path.dirname(__file__), "convert.py")
+        script_path = os.path.join(os.path.dirname(__file__), "convert_hf_to_gguf.py")
         
-        # Fallback: Download convert.py if missing (from llama.cpp official)
+        # Fallback: Download convert_hf_to_gguf.py if missing
         if not os.path.exists(script_path):
-            print("Downloading conversion script from llama.cpp...")
-            url = "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert.py"
+            print("Downloading stable conversion script (858d4a7)...")
+            url = "https://raw.githubusercontent.com/ggerganov/llama.cpp/858d4a7fb1b6d19a413f3ba5962003886561110f/convert-hf-to-gguf.py"
             try:
                 urllib.request.urlretrieve(url, script_path)
             except Exception as e:
@@ -94,8 +94,6 @@ class VMLQuantOptimizer:
 
         # Run conversion
         try:
-            # We need to ensure dependencies for convert.py are met
-            # convert.py usually needs 'gguf' and 'sentencepiece'
             cmd = [sys.executable, script_path, model_path, "--outfile", output_path, "--outtype", out_type]
             result = subprocess.run(cmd, capture_output=True, text=True)
             
@@ -117,16 +115,17 @@ class VMLQuantOptimizer:
 
     @staticmethod
     def generate_modelfile(gguf_path, system_prompt="You are a Vibe-ML optimized assistant."):
-        """Generates an Ollama Modelfile."""
-        content = f"""FROM {gguf_path}
+      """Generates an Ollama Modelfile with an absolute path to the GGUF."""
+      abs_gguf_path = os.path.abspath(gguf_path).replace("\\", "/") # Ollama prefers forward slashes
+      content = f"""FROM {abs_gguf_path}
 PARAMETER temperature 0.7
 PARAMETER top_p 0.9
 SYSTEM \"\"\"{system_prompt}\"\"\"
 """
-        modelfile_path = "Modelfile.temp"
-        with open(modelfile_path, "w") as f:
-            f.write(content)
-        return modelfile_path
+      modelfile_path = "Modelfile.temp"
+      with open(modelfile_path, "w") as f:
+          f.write(content)
+      return modelfile_path
 
     @classmethod
     def import_to_ollama(cls, model_name, gguf_path):

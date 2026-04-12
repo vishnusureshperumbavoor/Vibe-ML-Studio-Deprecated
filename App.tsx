@@ -154,7 +154,7 @@ export default function App() {
 
   useEffect(() => {
     checkOllamaStatus();
-    const interval = setInterval(checkOllamaStatus, 10000);
+    const interval = setInterval(checkOllamaStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -684,6 +684,9 @@ export default function App() {
         ]);
       } finally {
         setIsGenerating(false);
+        setIsAutoRunning(false);
+        // Immediately refresh models in case code created one
+        checkOllamaStatus();
       }
       return;
     }
@@ -978,21 +981,87 @@ export default function App() {
                   </div>
                 )}
 
-                {cells.map((cell) => (
-                  <div id={`cell-${cell.id}`} key={cell.id}>
-                    <Cell
-                      cell={cell}
-                      isActive={activeCellId === cell.id}
-                      onFocus={() => handleCellFocus(cell.id)}
-                      onChange={updateCellContent}
-                      onRun={handleManualRun}
-                      onDelete={deleteCell}
-                      onMoveUp={(id) => moveCell(id, "up")}
-                      onMoveDown={(id) => moveCell(id, "down")}
-                      onTypeChange={updateCellType}
-                    />
+                {/* Initial Cell Inserter (if empty) */}
+                {cells.length > 0 && (
+                  <div className="group relative flex justify-center h-4 mb-[-8px] z-10">
+                    <div className="absolute inset-0 flex items-center px-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
+                    </div>
+                    <div className="hidden group-hover:flex items-center gap-2 z-20">
+                      <button 
+                        onClick={() => addCell('code', 0)}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-purple-500/30 rounded-full text-[10px] font-bold text-purple-400 hover:bg-purple-600/20 transition-all shadow-lg"
+                      >
+                        <Plus size={10} /> CODE
+                      </button>
+                      <button 
+                        onClick={() => addCell('markdown', 0)}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-indigo-500/30 rounded-full text-[10px] font-bold text-indigo-400 hover:bg-indigo-600/20 transition-all shadow-lg"
+                      >
+                        <Plus size={10} /> TEXT
+                      </button>
+                    </div>
                   </div>
+                )}
+
+                {cells.map((cell, idx) => (
+                  <React.Fragment key={cell.id}>
+                    <div id={`cell-${cell.id}`}>
+                      <Cell
+                        cell={cell}
+                        isActive={activeCellId === cell.id}
+                        onFocus={() => handleCellFocus(cell.id)}
+                        onChange={updateCellContent}
+                        onRun={handleManualRun}
+                        onDelete={deleteCell}
+                        onMoveUp={(id) => moveCell(id, "up")}
+                        onMoveDown={(id) => moveCell(id, "down")}
+                        onTypeChange={updateCellType}
+                      />
+                    </div>
+                    
+                    {/* Intermediate Inserter */}
+                    <div className="group relative flex justify-center h-4 my-[-8px] z-10">
+                      <div className="absolute inset-0 flex items-center px-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
+                      </div>
+                      <div className="hidden group-hover:flex items-center gap-2 z-20 pointer-events-auto">
+                        <button 
+                          onClick={() => addCell('code', idx + 1)}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-purple-500/30 rounded-full text-[10px] font-bold text-purple-400 hover:bg-purple-500/40 transition-all shadow-xl"
+                        >
+                          <Plus size={10} /> CODE
+                        </button>
+                        <button 
+                          onClick={() => addCell('markdown', idx + 1)}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-indigo-500/30 rounded-full text-[10px] font-bold text-indigo-400 hover:bg-indigo-500/40 transition-all shadow-xl"
+                        >
+                          <Plus size={10} /> TEXT
+                        </button>
+                      </div>
+                    </div>
+                  </React.Fragment>
                 ))}
+
+                {/* Bottom Appender */}
+                {!isGenerating && (
+                  <div className="flex justify-center py-12 gap-4 animate-in fade-in duration-700">
+                    <button 
+                      onClick={() => addCell('code')}
+                      className="flex items-center gap-2.5 px-6 py-2.5 bg-purple-600/10 border border-purple-500/20 rounded-2xl text-[11px] font-bold text-purple-400 hover:bg-purple-500/20 hover:border-purple-400/40 transition-all group"
+                    >
+                      <Plus size={14} className="group-hover:rotate-90 transition-transform" /> 
+                      ADD CODE BLOCK
+                    </button>
+                    <button 
+                      onClick={() => addCell('markdown')}
+                      className="flex items-center gap-2.5 px-6 py-2.5 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl text-[11px] font-bold text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-400/40 transition-all group"
+                    >
+                      <Plus size={14} className="group-hover:rotate-90 transition-transform" /> 
+                      ADD TEXT BLOCK
+                    </button>
+                  </div>
+                )}
 
                 <div ref={bottomRef} className="h-4" />
 
