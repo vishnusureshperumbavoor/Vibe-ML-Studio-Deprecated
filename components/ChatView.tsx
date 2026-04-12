@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square } from 'lucide-react';
 import { Button } from './Button';
 
 interface Message {
@@ -35,6 +35,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (ollamaModels.length > 0 && !selectedModel) {
@@ -62,8 +63,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
     }
   }, [messages]);
 
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || !selectedModel || isSending) return;
+
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
 
     const userMessage: Message = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
@@ -79,6 +90,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
           messages: [...messages, userMessage],
           stream: true,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.body) return;
@@ -127,14 +139,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
           boundary = buffer.indexOf('\n');
         }
       }
-    } catch (error) {
-      console.error('Chat error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "Error: Failed to reach Ollama. Is the service running?" 
-      }]);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Stream stopped by user');
+      } else {
+        console.error('Chat error:', error);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: "Error: Failed to reach Ollama. Is the service running?" 
+        }]);
+      }
     } finally {
       setIsSending(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -304,18 +321,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
             placeholder={isOllamaOnline ? `Message ${selectedModel}...` : "Waiting for Ollama..."}
             className="w-full bg-[#140F1D]/80 backdrop-blur-xl border border-[#352554] rounded-3xl p-5 pr-16 text-[#E2D8F0] placeholder-[#9480B3] focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none shadow-2xl h-[72px]"
             rows={1}
-            disabled={!isOllamaOnline || isSending}
+            disabled={!isOllamaOnline && !isSending}
           />
           <button
-            onClick={handleSend}
-            disabled={!input.trim() || isSending || !isOllamaOnline}
+            onClick={isSending ? handleStop : handleSend}
+            disabled={(!input.trim() && !isSending) || !isOllamaOnline}
             className={`absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
-              input.trim() && !isSending && isOllamaOnline
+              isSending
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 shadow-lg shadow-indigo-900/40 active:scale-95'
+                : input.trim() && isOllamaOnline
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40 hover:scale-105 active:scale-95'
                 : 'bg-[#1D152A] text-gray-500 cursor-not-allowed'
             }`}
           >
-            {isSending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+            {isSending ? <Square size={18} fill="currentColor" /> : <Send size={20} />}
           </button>
         </div>
       </div>
