@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
-  Play,
   Sparkles,
   Send,
   Trash2,
@@ -1044,25 +1043,6 @@ export default function App() {
                 ))}
 
                 {/* Bottom Appender */}
-                {!isGenerating && (
-                  <div className="flex justify-center py-12 gap-4 animate-in fade-in duration-700">
-                    <button 
-                      onClick={() => addCell('code')}
-                      className="flex items-center gap-2.5 px-6 py-2.5 bg-purple-600/10 border border-purple-500/20 rounded-2xl text-[11px] font-bold text-purple-400 hover:bg-purple-500/20 hover:border-purple-400/40 transition-all group"
-                    >
-                      <Plus size={14} className="group-hover:rotate-90 transition-transform" /> 
-                      ADD CODE BLOCK
-                    </button>
-                    <button 
-                      onClick={() => addCell('markdown')}
-                      className="flex items-center gap-2.5 px-6 py-2.5 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl text-[11px] font-bold text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-400/40 transition-all group"
-                    >
-                      <Plus size={14} className="group-hover:rotate-90 transition-transform" /> 
-                      ADD TEXT BLOCK
-                    </button>
-                  </div>
-                )}
-
                 <div ref={bottomRef} className="h-4" />
 
                 {!isAutoRunning && cells.length > 0 && (

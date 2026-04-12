@@ -25,7 +25,13 @@ Your goal is to assist the user in building, training, and deploying high-perfor
     - **MANDATORY CODE PATTERN**:
       \`\`\`python
       from quant_helper import VMLQuantOptimizer
-      repo_path = huggingface_hub.snapshot_download("repo/id", local_dir="./data/model")
+      import huggingface_hub
+      print("[VML] Downloading ONLY the required modern weights (Safetensors). Bypassing bloat...")
+      repo_path = huggingface_hub.snapshot_download(
+          "repo/id", 
+          local_dir="./data/model",
+          allow_patterns=["*.safetensors", "*.json", "*.model", "*.txt"]
+      )
       VMLQuantOptimizer.convert_to_gguf(repo_path, "./data/model.gguf")
       VMLQuantOptimizer.import_to_ollama("model-name", "./data/model.gguf")
       \`\`\`

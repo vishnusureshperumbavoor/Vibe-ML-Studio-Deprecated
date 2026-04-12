@@ -1,5 +1,7 @@
 Download Qwen/Qwen2-0.5B-Instruct and quantize it
 
+Download HuggingFaceTB/SmolLM-360M and quantize it. Please note it is smolLM 360 million parameters  and not smolLLM
+
 Display image https://post.healthline.com/wp-content/uploads/2022/01/CT-scan-of-the-brain-body5.jpg
 
 Find Huggingface Spaces that can transcribe audio files.

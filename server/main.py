@@ -97,6 +97,7 @@ async def execute_code(req: ExecuteRequest):
 
     async def stream_output():
         temp_path = None
+        process = None
         try:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                 f.write(clean_code)
@@ -119,6 +120,9 @@ async def execute_code(req: ExecuteRequest):
                     
                 line = chunk_bytes.decode('utf-8', errors='replace')
                 
+                # Option 1: Convert carriage returns to newlines for text-based progress bars
+                line = line.replace('\r', '\n')
+                
                 # Detect Gradio startup
                 if "Running on local URL" in line:
                     is_gradio = True
@@ -132,13 +136,20 @@ async def execute_code(req: ExecuteRequest):
             if not is_gradio:
                 yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': return_code != 0})}\n\n"
             
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             yield f"data: {json.dumps({'output': str(e), 'is_done': True, 'is_error': True})}\n\n"
         finally:
+            if process and process.returncode is None:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
-                except:
+                except Exception:
                     pass
 
     return StreamingResponse(stream_output(), media_type="text/event-stream")

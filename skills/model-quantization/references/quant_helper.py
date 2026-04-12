@@ -1,4 +1,6 @@
 import os
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 import subprocess
 import time
 import json
@@ -94,8 +96,27 @@ class VMLQuantOptimizer:
 
         # Run conversion
         try:
-            cmd = [sys.executable, script_path, model_path, "--outfile", output_path, "--outtype", out_type]
+            # Create a memory-safe wrapper to bypass gguf version crashes
+            wrapper_path = os.path.join(os.path.dirname(script_path), "safe_convert.py")
+            with open(wrapper_path, "w", encoding="utf-8") as f:
+                f.write(f"""import sys
+import gguf
+if not hasattr(gguf.MODEL_ARCH, 'GEMMA4'): gguf.MODEL_ARCH.GEMMA4 = 'gemma4'
+if not hasattr(gguf.MODEL_ARCH, 'MISTRAL4'): gguf.MODEL_ARCH.MISTRAL4 = 'mistral4'
+sys.path.append(r"{os.path.dirname(script_path)}")
+import convert_hf_to_gguf
+sys.argv = ['convert_hf_to_gguf.py', r'{model_path}', '--outfile', r'{output_path}', '--outtype', '{out_type}']
+try:
+    convert_hf_to_gguf.main()
+except SystemExit as e:
+    sys.exit(e.code)
+""")
+            cmd = [sys.executable, wrapper_path]
             result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Clean up wrapper
+            if os.path.exists(wrapper_path):
+                os.remove(wrapper_path)
             
             if result.returncode != 0:
                 # If dependencies are missing, try to install them on the fly
