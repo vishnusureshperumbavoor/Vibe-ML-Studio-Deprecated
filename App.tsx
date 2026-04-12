@@ -11,6 +11,8 @@ import {
   Rocket,
   Square,
   Activity,
+  MessageSquare,
+  Terminal,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -30,6 +32,7 @@ import {
 } from "./services/aiService";
 import { VMLAgent } from "./services/vmlAgent";
 import { ThinkingView } from "./components/ThinkingView";
+import { ChatView } from "./components/ChatView";
 
 const API_BASE = "http://127.0.0.1:2000";
 
@@ -134,7 +137,8 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string}>({ status: 'testing' });
+  const [activeView, setActiveView] = useState<'studio' | 'chat'>('studio');
+  const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string; models?: any[]}>({ status: 'testing' });
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
 
@@ -852,6 +856,26 @@ export default function App() {
             <Trash2 size={16} />
           </Button>
           <div className="h-4 w-px bg-[#352554] mx-2"></div>
+
+          {/* View Switcher */}
+          <div className="flex bg-[#0B090F] p-1 rounded-xl border border-[#352554] mr-2">
+            <button
+              onClick={() => setActiveView('studio')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+            >
+              <Terminal size={14} />
+              <span>Studio</span>
+            </button>
+            <button
+              onClick={() => setActiveView('chat')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'chat' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+            >
+              <MessageSquare size={14} />
+              <span>Chat</span>
+            </button>
+          </div>
+          
+          <div className="h-4 w-px bg-[#352554] mx-2"></div>
           
           {/* Ollama Status Badge */}
           <div 
@@ -865,9 +889,22 @@ export default function App() {
             title={ollamaStatus.message || `Ollama ${ollamaStatus.version || ''}`}
           >
             <Activity size={10} className={ollamaStatus.status === 'online' ? "animate-pulse" : ""} />
-            <span className="tracking-widest uppercase">
-              Ollama: {ollamaStatus.status === 'testing' ? 'Checking' : ollamaStatus.status}
-            </span>
+            <select
+              value={ollamaStatus.models?.some(m => m.name === (ollamaStatus.selectedModel || '')) ? ollamaStatus.selectedModel : (ollamaStatus.models?.[0]?.name || '')}
+              onChange={(e) => setOllamaStatus(prev => ({ ...prev, selectedModel: e.target.value }))}
+              className="bg-transparent border-none text-[10px] uppercase tracking-widest font-bold focus:outline-none cursor-pointer"
+              disabled={ollamaStatus.status !== 'online' || !ollamaStatus.models?.length}
+            >
+              {ollamaStatus.status === 'online' && ollamaStatus.models?.length ? (
+                ollamaStatus.models.map((m: any) => (
+                  <option key={m.name} value={m.name} className="bg-[#140F1D] text-white">
+                    {m.name.toUpperCase()}
+                  </option>
+                ))
+              ) : (
+                <option>{ollamaStatus.status === 'testing' ? 'Checking...' : 'Ollama Offline'}</option>
+              )}
+            </select>
           </div>
 
           {isAutoRunning && (
@@ -888,78 +925,93 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-grow flex overflow-hidden relative">
-        {/* Notebook Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8 transition-all duration-500">
-          <div className="max-w-5xl mx-auto space-y-6">
-            {/* Clarification Loop UI */}
-            {clarification && (
-              <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                <div className="flex items-start gap-4">
-                  <div className="p-2 bg-indigo-500/20 rounded-lg">
-                    <Sparkles className="text-indigo-400" size={20} />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-indigo-300 font-semibold mb-2">
-                      Agent Clarification Needed
-                    </h3>
-                    <p className="text-[#E2D8F0]/80 text-sm leading-relaxed mb-4">
-                      {clarification}
-                    </p>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => {
-                          setPrompt("");
-                          setClarification(null);
-                        }}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                      >
-                        Dismiss
-                      </button>
+      <div className="flex-1 flex overflow-hidden relative w-full">
+        {activeView === 'chat' ? (
+          <ChatView 
+            ollamaModels={ollamaStatus.models || []} 
+            isOllamaOnline={ollamaStatus.status === 'online'} 
+            selectedModel={ollamaStatus.selectedModel || (ollamaStatus.models?.[0]?.name || '')}
+            onModelChange={(model) => setOllamaStatus(prev => ({ ...prev, selectedModel: model }))}
+          />
+        ) : (
+          <>
+            {/* Notebook Area */}
+            <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8 transition-all duration-500">
+              <div className="max-w-5xl mx-auto space-y-6">
+                {/* Clarification Loop UI */}
+                {clarification && (
+                  <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-start gap-4">
+                      <div className="p-2 bg-indigo-500/20 rounded-lg">
+                        <Sparkles className="text-indigo-400" size={20} />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-indigo-300 font-semibold mb-2">
+                          Agent Clarification Needed
+                        </h3>
+                        <p className="text-[#E2D8F0]/80 text-sm leading-relaxed mb-4">
+                          {clarification}
+                        </p>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              setPrompt("");
+                              setClarification(null);
+                            }}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            {cells.length === 0 && !isGenerating && !clarification && (
-              <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
-                <Sparkles size={48} className="mb-4 text-[#352554]" />
-                <p>
-                  Ladies and Gentlemen, you are not ready for this, Vibe Traning
-                  Agents. Type a prompt below.
-                </p>
-              </div>
-            )}
+                {cells.length === 0 && !isGenerating && !clarification && (
+                  <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
+                    <Sparkles size={48} className="mb-4 text-[#352554]" />
+                    <p>
+                      Ladies and Gentlemen, you are not ready for this, Vibe Traning
+                      Agents. Type a prompt below.
+                    </p>
+                  </div>
+                )}
 
-            {cells.map((cell) => (
-              <div id={`cell-${cell.id}`} key={cell.id}>
-                <Cell
-                  cell={cell}
-                  isActive={activeCellId === cell.id}
-                  onFocus={() => handleCellFocus(cell.id)}
-                  onChange={updateCellContent}
-                  onRun={handleManualRun}
-                  onDelete={deleteCell}
-                  onMoveUp={(id) => moveCell(id, "up")}
-                  onMoveDown={(id) => moveCell(id, "down")}
-                  onTypeChange={updateCellType}
-                />
-              </div>
-            ))}
+                {cells.map((cell) => (
+                  <div id={`cell-${cell.id}`} key={cell.id}>
+                    <Cell
+                      cell={cell}
+                      isActive={activeCellId === cell.id}
+                      onFocus={() => handleCellFocus(cell.id)}
+                      onChange={updateCellContent}
+                      onRun={handleManualRun}
+                      onDelete={deleteCell}
+                      onMoveUp={(id) => moveCell(id, "up")}
+                      onMoveDown={(id) => moveCell(id, "down")}
+                      onTypeChange={updateCellType}
+                    />
+                  </div>
+                ))}
 
-            <div ref={bottomRef} className="h-4" />
+                <div ref={bottomRef} className="h-4" />
 
-            {!isAutoRunning && cells.length > 0 && (
-              <div className="group flex justify-center items-center py-8 opacity-20 hover:opacity-100 transition-opacity">
-                <div className="h-px bg-[#352554] flex-grow"></div>
+                {!isAutoRunning && cells.length > 0 && (
+                  <div className="group flex justify-center items-center py-8 opacity-20 hover:opacity-100 transition-opacity">
+                    <div className="h-px bg-[#352554] flex-grow"></div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </main>
+            </main>
+            {/* Footer Gradient Overlays */}
+            <div className="absolute top-0 inset-x-0 h-4 bg-gradient-to-b from-[#0B090F] to-transparent pointer-events-none z-10"></div>
+            <div className="absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-[#0B090F] to-transparent pointer-events-none z-10"></div>
+          </>
+        )}
       </div>
 
       {/* Bottom Prompt Bar - Floating */}
+      {activeView === 'studio' && (
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
         <div className="max-w-3xl mx-auto pointer-events-auto">
           <div
@@ -1246,6 +1298,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      )}
       <ManageSkillsPanel
         visible={showManageSkills}
         onClose={() => setShowManageSkills(false)}

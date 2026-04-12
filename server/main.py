@@ -219,11 +219,12 @@ async def save_skill(req: FileWriteRequest):
 async def ollama_status():
     """
     Checks if the local Ollama service is running by polling the /api/tags endpoint.
+    Ensures IPv4 is used explicitly to avoid Windows IPv6 localhost issues.
     """
     try:
         import requests
-        # Poll the Ollama API with a short timeout
-        response = requests.get("http://127.0.0.1:11434/api/tags", timeout=1)
+        # Poll the Ollama API with a slightly longer timeout
+        response = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
         if response.status_code == 200:
             data = response.json()
             return {
@@ -231,9 +232,9 @@ async def ollama_status():
                 "models": data.get("models", []),
                 "version": response.headers.get("x-ollama-version", "unknown")
             }
-        return {"status": "warning", "message": "Ollama responded with an error"}
-    except Exception:
-        return {"status": "offline", "message": "Ollama service is not reachable"}
+        return {"status": "warning", "message": f"Ollama Error: {response.status_code}"}
+    except Exception as e:
+        return {"status": "offline", "message": "Ollama service unreachable on 11434"}
 
 @app.get("/images/{filename}")
 async def get_image(filename: str):
