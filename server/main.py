@@ -259,6 +259,48 @@ async def get_image(filename: str):
     return FileResponse(file_path)
 
 
+@app.post("/save_token")
+async def save_token(payload: dict = Body(...)):
+    """
+    Persists a token (e.g., HF_TOKEN) to the .env file in the server directory.
+    """
+    try:
+        token_key = payload.get("key")
+        token_val = payload.get("value")
+        if not token_key or not token_val:
+            raise HTTPException(status_code=400, detail="Key and Value required")
+
+        env_path = os.path.join(BASE_DIR, ".env")
+        
+        # Read existing lines
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        
+        # Update or add the key
+        found = False
+        new_line = f"{token_key}={token_val}\n"
+        for i, line in enumerate(lines):
+            if line.startswith(f"{token_key}="):
+                lines[i] = new_line
+                found = True
+                break
+        
+        if not found:
+            lines.append(new_line)
+            
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+            
+        # Also update the current environment so it's active immediately
+        os.environ[token_key] = token_val
+        
+        return {"success": True, "message": f"{token_key} saved and active."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     # Run server locally on port 8000

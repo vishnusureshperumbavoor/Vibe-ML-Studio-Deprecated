@@ -3,7 +3,6 @@ os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 import subprocess
 import time
-import json
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 

@@ -829,7 +829,7 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-sm font-semibold text-[#E2D8F0] tracking-wide">
-              VML Agent Studio
+              Vibe ML Agent Studio
             </h1>
             <span className="text-xs text-[#9480B3] flex items-center gap-2">
               {isAutoRunning ? (
