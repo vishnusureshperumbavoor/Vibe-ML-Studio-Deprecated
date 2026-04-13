@@ -12,16 +12,22 @@
 4. **Ollama Integration:** The `import_to_ollama` method automatically generates a `Modelfile` and creates the local model.
 
 ## Mandatory Implementation Pattern
-To quantize any model from Hugging Face, follow this iterative block:
+To quantize any model from Hugging Face, determine the requested **bit-depth** (default to `q4_k_m` if not specified) and use the following block:
+
+| Request | `out_type` | Use Case |
+| :--- | :--- | :--- |
+| **4-bit** | `"q4_k_m"` | **Default.** Best for local use (fast & small). |
+| **8-bit** | `"q8_0"` | Near-perfect accuracy, 2x smaller than FP16. |
+| **16-bit** | `"f16"` | Reference precision (no accuracy loss). |
 
 ```python
 import os
 import huggingface_hub
 from quant_helper import VMLQuantOptimizer
 
-# 1. Targeted Download (Selective patterns to save time/space)
+# 1. Targeted Download
 print("[VML] Pulling optimized weights from Hub...")
-repo_id = "{USER_PROVIDED_REPO_ID}" # e.g. "MBZUAI/MobiLlama-1B"
+repo_id = "{USER_PROVIDED_REPO_ID}"
 model_dir = f"./data/{repo_id.split('/')[-1]}"
 
 repo_path = huggingface_hub.snapshot_download(
@@ -30,14 +36,16 @@ repo_path = huggingface_hub.snapshot_download(
     allow_patterns=["*.safetensors", "*.json", "*.model", "*.txt"]
 )
 
-# 2. GGUF Conversion
-gguf_path = f"{model_dir}.gguf"
-print(f"[VML] Converting {repo_id} to GGUF (f16)...")
-conv_result = VMLQuantOptimizer.convert_to_gguf(repo_path, gguf_path)
+# 2. Dynamic GGUF Conversion (Check user's requested bit-depth)
+target_type = "{q4_k_m | q8_0 | f16}" 
+gguf_path = f"{model_dir}_{target_type}.gguf"
+
+print(f"[VML] Converting {repo_id} to GGUF ({target_type})...")
+conv_result = VMLQuantOptimizer.convert_to_gguf(repo_path, gguf_path, out_type=target_type)
 
 if "success" in conv_result:
     # 3. Import to Ollama
-    model_name = repo_id.split('/')[-1].lower().replace("-", "_")
+    model_name = f"{repo_id.split('/')[-1].lower().replace('-', '_')}_{target_type}"
     print(f"[VML] Importing to local Ollama instance as '{model_name}'...")
     import_result = VMLQuantOptimizer.import_to_ollama(model_name, gguf_path)
     print(import_result)
