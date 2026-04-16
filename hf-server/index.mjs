@@ -12,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HF_TOKEN = process.env.HF_TOKEN || process.env.VITE_HF_TOKEN; 
+const HF_TOKEN = process.env.HF_TOKEN || process.env.HF_TOKEN; 
 
 let mcpClient = null;
 

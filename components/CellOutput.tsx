@@ -101,7 +101,7 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type }) 
                         return (
                             <HuggingFaceAuth 
                                 key={i}
-                                envKey="VITE_HF_TOKEN"
+                                envKey="HF_TOKEN"
                                 placeholder="hf_..."
                             />
                         );

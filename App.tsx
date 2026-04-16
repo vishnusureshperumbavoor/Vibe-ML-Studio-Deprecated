@@ -43,7 +43,7 @@ const INITIAL_CONNECTORS: ConnectorConfig[] = [
     url: "http://127.0.0.1:1001",
     enabled: true,
     status: "idle",
-    tokenHint: "Set VITE_HF_TOKEN",
+    tokenHint: "Set HF_TOKEN",
   },
   {
     id: "kaggle",

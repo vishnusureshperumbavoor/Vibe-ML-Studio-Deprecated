@@ -1,3 +1,7 @@
+Fine-tune Qwen2-0.5B on the Alpaca dataset from Hugging Face
+
+Fine-tune Qwen/Qwen2-0.5B on the m-a-p/CodeFeedback-Filtered-Instruction dataset from Hugging Face
+
 Download Qwen/Qwen2-0.5B-Instruct and quantize it
 
 Download HuggingFaceTB/SmolLM-360M and quantize it. Please note it is smolLM 360 million parameters  and not smolLLM
