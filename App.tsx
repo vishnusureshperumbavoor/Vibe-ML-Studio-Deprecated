@@ -986,7 +986,7 @@ export default function App() {
             
             <WorkFlowSwitcher active={workflowMode} onChange={setWorkflowMode} />
             
-            <div className="w-full max-w-4xl bg-[#140F1D] border border-white/5 rounded-[32px] p-8 shadow-2xl relative overflow-hidden group">
+            <div className="w-full max-w-4xl bg-[#140F1D] border border-white/5 rounded-[32px] p-8 shadow-2xl relative group">
               <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
               
               {workflowMode === 'finetune' ? (

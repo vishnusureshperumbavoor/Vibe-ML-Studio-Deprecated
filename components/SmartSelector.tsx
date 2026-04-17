@@ -34,13 +34,15 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const skipSearchRef = useRef(false);
+
   const search = async (q: string) => {
     if (!q || q.length < 2) return;
     setIsLoading(true);
-    setIsOpen(true);
+    // Removed setIsOpen(true) from here to prevent auto-reopening on selection
     try {
       const toolName = type === 'model' ? 'model_search' : 'dataset_search';
-      const mcpUrl = "http://127.0.0.1:1001/mcp/call"; // Hugging Face MCP
+      const mcpUrl = "http://127.0.0.1:1001/mcp/call"; 
       
       const resp = await fetch(mcpUrl, {
         method: "POST",
@@ -52,23 +54,16 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
       });
       
       const payload = await resp.json();
-      console.log("🔍 [SmartSelector] Raw MCP Payload:", payload);
-      
       const content = payload.result || payload; 
-      console.log("📦 [SmartSelector] Extracted Content:", content);
       
       if (content && content[0] && content[0].text) {
         let text = content[0].text;
         
-        // 1. Try structured JSON first
         if (text.includes("[JSON_RESULTS]")) {
           const jsonStr = text.split("[JSON_RESULTS]")[1].trim();
           const parsed = JSON.parse(jsonStr);
           setResults(parsed);
-        } 
-        // 2. Fallback: Parse markdown list (Legacy Format)
-        else {
-          console.log("⚠️ [SmartSelector] Falling back to Regex parsing for Markdown results.");
+        } else {
           const regex = /-\s+\*\*(.*?)\*\*\s+\(Downloads:\s+(.*?)\)/g;
           const parsed: any[] = [];
           let m;
@@ -94,7 +89,11 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query !== defaultValue) search(query);
+      if (skipSearchRef.current) {
+        skipSearchRef.current = false;
+        return;
+      }
+      if (query && query !== defaultValue) search(query);
     }, 500);
     return () => clearTimeout(timer);
   }, [query]);
@@ -112,7 +111,9 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
             setQuery(e.target.value);
             setIsOpen(true);
           }}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            if (query.length >= 2) setIsOpen(true);
+          }}
           placeholder={placeholder}
           className="w-full bg-[#0B090F] border border-white/10 rounded-2xl pl-10 pr-10 py-3.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 focus:ring-4 focus:ring-amber-500/5 transition-all shadow-inner"
         />
@@ -128,9 +129,11 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
               <button
                 key={res.id}
                 onClick={() => {
+                  skipSearchRef.current = true;
                   setQuery(res.id);
                   onSelect(res.id);
                   setIsOpen(false);
+                  setResults([]);
                 }}
                 className="w-full flex flex-col items-start p-3 rounded-xl hover:bg-white/5 transition-all text-left group border border-transparent hover:border-white/10"
               >
