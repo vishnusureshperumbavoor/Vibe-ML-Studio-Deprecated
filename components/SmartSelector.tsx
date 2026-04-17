@@ -14,9 +14,10 @@ interface SmartSelectorProps {
   onSelect: (id: string) => void;
   placeholder: string;
   defaultValue?: string;
+  suggestions?: any[];
 }
 
-export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, placeholder, defaultValue }) => {
+export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, placeholder, defaultValue, suggestions }) => {
   const [query, setQuery] = useState(defaultValue || '');
   const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -98,6 +99,9 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
     return () => clearTimeout(timer);
   }, [query]);
 
+  const displayResults = query.length < 2 ? (suggestions || []) : results;
+  const isShowingSuggestions = query.length < 2 && (suggestions?.length || 0) > 0;
+
   return (
     <div className="relative w-full" ref={containerRef}>
       <div className="relative group">
@@ -111,9 +115,7 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
             setQuery(e.target.value);
             setIsOpen(true);
           }}
-          onFocus={() => {
-            if (query.length >= 2) setIsOpen(true);
-          }}
+          onFocus={() => setIsOpen(true)}
           placeholder={placeholder}
           className="w-full bg-[#0B090F] border border-white/10 rounded-2xl pl-10 pr-10 py-3.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 focus:ring-4 focus:ring-amber-500/5 transition-all shadow-inner"
         />
@@ -122,10 +124,16 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
         </div>
       </div>
 
-      {isOpen && (results.length > 0 || isLoading) && (
+      {isOpen && (displayResults.length > 0 || isLoading) && (
         <div className="absolute z-50 w-full mt-2 bg-[#121016] border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl max-h-80 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="p-2 space-y-1">
-            {results.map((res) => (
+            {isShowingSuggestions && (
+              <div className="px-3 py-2 text-[10px] font-black text-amber-500/50 uppercase tracking-[0.2em] border-b border-white/5 mb-2 flex items-center gap-2">
+                <Star size={10} fill="currentColor" /> Quick Suggestions
+              </div>
+            )}
+            
+            {displayResults.map((res) => (
               <button
                 key={res.id}
                 onClick={() => {

@@ -128,11 +128,15 @@ async def handle_call_tool(
         epochs = arguments.get("epochs", 3)
         rank = arguments.get("rank", 16)
         
-        script = f'''# Universal SFT Training Script with LoRA - VML Studio
+        # Split into logical blocks for the notebook
+        blocks = [
+            f"""# Block 1: Setup and Environment
 import os
 import torch
 import gc
+import json
 import subprocess
+import transformers
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
 from trl import SFTTrainer, SFTConfig
@@ -141,14 +145,14 @@ from peft import LoraConfig, get_peft_model
 model_id = "{base_model}"
 dataset_id = "{dataset_id}"
 hardware = "{hardware}"
-device = "cuda" if torch.cuda.is_available() and hardware.upper() == "GPU" else "cpu"
-rank = {rank}
 epochs = {epochs}
+rank = {rank}
+device = "cuda" if torch.cuda.is_available() and hardware.upper() == "GPU" else "cpu"
 
-print(f"🚀 Initializing LoRA SFT: {{model_id}} on {{dataset_id}} ({{device}})")
-print(f"🧬 SFT Parameters: Rank: {{rank}}, Epochs: {{epochs}}")
-
-# 1. Load Tokenizer & Model
+print(f"Initializing VML SFT Pipeline: {{model_id}} on {{dataset_id}} ({{device}})")
+""",
+            f"""# Block 2: Model and Tokenizer Loading
+print("Loading Model and Tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
@@ -160,11 +164,10 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch_dtype,
 )
 
-# 2. Configure LoRA
-print("💡 Applying LoRA adapter...")
+print("Applying LoRA adapter (Rank: {rank})...")
 peft_config = LoraConfig(
-    r=rank,
-    lora_alpha=rank * 2,
+    r={rank},
+    lora_alpha={rank} * 2,
     target_modules="all-linear",
     lora_dropout=0.05,
     bias="none",
@@ -172,9 +175,9 @@ peft_config = LoraConfig(
 )
 model = get_peft_model(model, peft_config)
 model.print_trainable_parameters()
-
-# 3. Dynamic Dataset Mapping
-print("📥 Loading and mapping dataset...")
+""",
+            f"""# Block 3: Dataset Preparation
+print("Loading and mapping dataset...")
 dataset = load_dataset(dataset_id, split="train[:500]")
 
 def get_universal_format(example):
@@ -188,39 +191,60 @@ def get_universal_format(example):
     return {{"text": f"{{instr}}\\n{{context}}\\n{{out}}"}}
 
 dataset = dataset.map(get_universal_format)
+""",
+            f"""# Block 4: Training Execution
+class VMLReportingCallback(transformers.TrainerCallback):
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs:
+            logs["vml_step"] = state.global_step
+            logs["vml_epoch"] = state.epoch
+            print(f"[VML_DATA] {{json.dumps(logs)}}")
 
-# 4. Setup SFT Configuration
 sft_config = SFTConfig(
     output_dir="./vml_sft_output",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
-    num_train_epochs=epochs,
-    use_cpu=(device == "cpu"),
-    logging_steps=5,
+    num_train_epochs={epochs},
+    logging_steps=1,
     max_steps=20,
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",
-    max_length=512
 )
 
-# 5. Start Trainer
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset,
     args=sft_config,
-    processing_class=tokenizer
+    processing_class=tokenizer,
+    callbacks=[VMLReportingCallback()]
 )
 
-print("🔥 Starting training loop...")
+print("Starting training loop...")
 trainer.train()
-
-print("💾 Saving LoRA adapters...")
+""",
+            f"""# Block 5: Export and Integration
+print("Saving LoRA adapters...")
 trainer.save_model("./vml_sft_output")
-print("✅ SFT Pipeline Complete. Model saved to ./vml_sft_output")
-'''
-        return [types.TextContent(type="text", text=script)]
+
+print("Packaging for Ollama...")
+modelfile_content = f"FROM ./vml_sft_output\\n"
+with open("Modelfile", "w") as f:
+    f.write(modelfile_content)
+
+try:
+    subprocess.run(["ollama", "create", "vml-finetuned", "-f", "Modelfile"], check=True)
+    print("Model successfully imported into Ollama as 'vml-finetuned'!")
+except Exception as e:
+    print(f"Failed to import into Ollama: {{e}}")
+
+print("SFT Pipeline Complete.")
+"""
+        ]
+        
+        blocks_json = json.dumps(blocks)
+        return [types.TextContent(type="text", text=f"[VML_BLOCKS]\n{blocks_json}")]
 
     elif name == "start_quantization_job":
         model_id = arguments.get("model_id")

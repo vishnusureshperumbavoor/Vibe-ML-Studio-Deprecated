@@ -56,6 +56,18 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ onStart, isExe
     }
   };
 
+  const RECOMMENDED_MODELS = [
+    { id: 'Qwen/Qwen2-0.5B', downloads: 1250000, likes: 4500, is_cpu_ready: true },
+    { id: 'HuggingFaceTB/SmolLM-135M', downloads: 850000, likes: 2200, is_cpu_ready: true },
+    { id: 'microsoft/Phi-3-mini-4k-instruct', downloads: 3500000, likes: 8900, is_cpu_ready: true },
+  ];
+
+  const RECOMMENDED_DATASETS = [
+    { id: 'tatsu-lab/alpaca', downloads: 450000, likes: 1200 },
+    { id: 'yahma/alpaca-cleaned', downloads: 220000, likes: 850 },
+    { id: 'HuggingFaceH4/instruction-dataset', downloads: 150000, likes: 600 },
+  ];
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {systemInfo && (
@@ -84,6 +96,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ onStart, isExe
             type="model" 
             placeholder="Select model to train..." 
             onSelect={setModelId} 
+            suggestions={RECOMMENDED_MODELS}
           />
           <p className="text-[10px] text-white/30 px-1">Tip: Tiny models like Qwen-0.5B are best for CPU.</p>
         </div>
@@ -94,6 +107,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ onStart, isExe
             type="dataset" 
             placeholder="Select instruction dataset..." 
             onSelect={setDatasetId} 
+            suggestions={RECOMMENDED_DATASETS}
           />
           <p className="text-[10px] text-white/30 px-1">Try: 'yahma/alpaca-cleaned' for general instructions.</p>
         </div>

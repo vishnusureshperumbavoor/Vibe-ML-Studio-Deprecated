@@ -201,18 +201,47 @@ export default function App() {
         })
       });
       const data = await resp.json();
-      const script = data[0]?.text || "";
+      const rawText = data.result?.[0]?.text || "";
       
-      // 2. Add cell and execute
-      const cellId = uuidv4();
-      const newCell: CellData = { id: cellId, type: 'code', content: script, status: 'running' };
-      setCells(prev => [...prev, newCell]);
-      setActiveView('studio'); // Switch back to see output
-      
-      const result = await executeCode(script, (partial) => {
-        setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
-      });
-      setCells(prev => prev.map(c => c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c));
+      let blocks = [rawText];
+      if (rawText.startsWith("[VML_BLOCKS]")) {
+        const jsonStr = rawText.replace("[VML_BLOCKS]", "").trim();
+        blocks = JSON.parse(jsonStr);
+      }
+
+      setActiveView('studio'); 
+
+      // 2. Add and Execute Cells Sequentially
+      for (const blockScript of blocks) {
+        const cellId = uuidv4();
+        const newCell: CellData = { 
+          id: cellId, 
+          type: 'code', 
+          content: blockScript, 
+          status: 'running',
+          plots: [] 
+        };
+        
+        setCells(prev => [...prev, newCell]);
+        
+        const result = await executeCode(
+          blockScript, 
+          (partial) => {
+            setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+          },
+          (plotPoint) => {
+            setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
+          }
+        );
+
+        setCells(prev => prev.map(c => c.id === cellId ? { 
+          ...c, 
+          status: result.error ? 'error' : 'success', 
+          output: result.error || result.text 
+        } : c));
+
+        if (result.error) break; // Stop sequence on error
+      }
     } catch (e) {
       console.error("SFT Failed:", e);
     } finally {
@@ -232,16 +261,22 @@ export default function App() {
         })
       });
       const data = await resp.json();
-      const script = data[0]?.text || "";
+      const script = data.result?.[0]?.text || "";
       
       const cellId = uuidv4();
       const newCell: CellData = { id: cellId, type: 'code', content: script, status: 'running' };
       setCells(prev => [...prev, newCell]);
       setActiveView('studio');
       
-      const result = await executeCode(script, (partial) => {
-        setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
-      });
+      const result = await executeCode(
+        script, 
+        (partial) => {
+          setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+        },
+        (plotPoint) => {
+          setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
+        }
+      );
       setCells(prev => prev.map(c => c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c));
     } catch (e) {
       console.error("Quantization Failed:", e);
@@ -670,11 +705,19 @@ export default function App() {
     if (!cell) return { success: false, output: "Cell not found" };
 
     // Update output live
-    const localResult = await executeCode(cell.content, (partial) => {
-      setCells((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, output: partial } : c)),
-      );
-    });
+    const localResult = await executeCode(
+      cell.content, 
+      (partial) => {
+        setCells((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, output: partial } : c)),
+        );
+      },
+      (plotPoint) => {
+        setCells((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)),
+        );
+      }
+    );
 
     setCells((prev) =>
       prev.map((c) =>

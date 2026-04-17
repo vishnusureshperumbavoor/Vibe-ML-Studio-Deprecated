@@ -55,7 +55,8 @@ export async function callKimi(messages: any[], temperature = 0.1) {
 
 export const executeCode = async (
     code: string, 
-    onProgress?: (text: string) => void
+    onProgress?: (text: string) => void,
+    onPlotData?: (data: any) => void
 ): Promise<GeminiResponse> => {
     try {
         const response = await fetch("http://127.0.0.1:2000/execute", {
@@ -86,11 +87,27 @@ export const executeCode = async (
                         const jsonStr = line.trim().slice(6);
                         const data = JSON.parse(jsonStr);
                         
-                        // Advanced Virtual Terminal Emulation
                         if (data.output !== undefined) {
                             let chunk = data.output;
                             
-                            // Initialize lines if this is the first output for this cell
+                            // Real-time Telemetry Interception
+                            if (chunk.includes('[VML_DATA]')) {
+                                try {
+                                    const parts = chunk.split('[VML_DATA]');
+                                    const jsonPart = parts[1].trim();
+                                    // Extract simple JSON object
+                                    const match = jsonPart.match(/^(\{.*\})/);
+                                    if (match && onPlotData) {
+                                        onPlotData(JSON.parse(match[1]));
+                                    }
+                                    // Remove the tag from terminal output
+                                    chunk = parts[0] + (parts[1].split('}')[1] || '');
+                                } catch (e) {
+                                    console.warn("Plot data parse error", e);
+                                }
+                            }
+
+                            // Initialize terminal lines
                             if (fullOutput === "") {
                                 (window as any)._vml_term_lines = [""];
                                 (window as any)._vml_term_cursorY = 0;
@@ -99,75 +116,57 @@ export const executeCode = async (
                             let lines = (window as any)._vml_term_lines as string[];
                             let cursorY = (window as any)._vml_term_cursorY as number;
 
-                            // Handle ANSI Escape Codes and Control Characters
-                            // Check for \x1b[A (Cursor Up)
                             while (chunk.includes('\x1b[A')) {
                                 const idx = chunk.indexOf('\x1b[A');
-                                const pre = chunk.slice(0, idx);
-                                processText(pre);
+                                processText(chunk.slice(0, idx), lines, cursorY);
                                 cursorY = Math.max(0, cursorY - 1);
                                 chunk = chunk.slice(idx + 3);
                             }
 
-                            function processText(text: string) {
+                            function processText(text: string, termLines: string[], y: number) {
                                 let parts = text.split('\r');
                                 for (let i = 0; i < parts.length; i++) {
-                                    if (i > 0 || text.startsWith('\r')) {
-                                        // Carriage Return: Clear the line at the current cursorY
-                                        lines[cursorY] = "";
-                                    }
-                                    
+                                    if (i > 0 || text.startsWith('\r')) termLines[y] = "";
                                     let subParts = parts[i].split('\n');
                                     for (let j = 0; j < subParts.length; j++) {
                                         if (j > 0) {
-                                            cursorY++;
-                                            if (!lines[cursorY]) lines[cursorY] = "";
+                                            y++;
+                                            if (!termLines[y]) termLines[y] = "";
                                         }
-                                        lines[cursorY] += subParts[j];
+                                        termLines[y] += subParts[j];
                                     }
                                 }
+                                return y;
                             }
 
-                            processText(chunk);
-
-                            // Update global state
+                            cursorY = processText(chunk, lines, cursorY);
                             (window as any)._vml_term_lines = lines;
                             (window as any)._vml_term_cursorY = cursorY;
                             
-                            // Keep only the last 100 lines for performance
                             if (lines.length > 200) {
-                                const removeCount = lines.length - 100;
-                                (window as any)._vml_term_lines = lines.slice(removeCount);
-                                (window as any)._vml_term_cursorY = Math.max(0, cursorY - removeCount);
+                                lines = lines.slice(lines.length - 100);
+                                cursorY = Math.max(0, cursorY - (lines.length - 100));
                             }
 
-                            fullOutput = (window as any)._vml_term_lines.join('\n');
+                            fullOutput = lines.join('\n');
                             if (onProgress) onProgress(fullOutput);
                         }
                         
-                        // CRITICAL: Break early for Gradio or completion signals
                         if (data.is_done) {
                             isError = data.is_error;
-                            reader.cancel(); // Stop reading from the stream
-                            return { 
-                                text: fullOutput, 
-                                error: isError ? (fullOutput.trim() || "Execution failed") : undefined 
-                            };
+                            reader.cancel();
+                            return { text: fullOutput, error: isError ? (fullOutput.trim() || "Execution failed") : undefined };
                         }
                     } catch (e) {
-                        console.warn("JSON Parse Error in stream:", e, "Line:", line);
+                        console.warn("Stream parse error", e);
                     }
                 }
             }
         }
 
-        return { 
-            text: fullOutput, 
-            error: isError ? (fullOutput.trim() || "Execution failed with non-zero exit code") : undefined 
-        };
+        return { text: fullOutput, error: isError ? (fullOutput.trim() || "Execution failed") : undefined };
 
     } catch (error: any) {
-        console.error("Connection Error:", error);
         return { text: '', error: "Connect error: " + error.message };
     }
 };

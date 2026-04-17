@@ -12,6 +12,7 @@ export interface CellData {
   status: ExecutionStatus;
   executionCount?: number;
   lastRun?: number; // Timestamp
+  plots?: any[];
 }
 
 export interface NotebookResponse {

@@ -1,8 +1,9 @@
-import { Play, Copy, Wand2, CheckCircle2, Loader2, XCircle, Zap, Rocket } from 'lucide-react';
 import React, { useState } from 'react';
+import { Play, Copy, Wand2, CheckCircle2, Loader2, XCircle, Zap, Rocket, Terminal, Activity, Layout } from 'lucide-react';
 import { CellData } from '../types';
 import { EditorArea } from './EditorArea';
 import { CellOutput } from './CellOutput';
+import { PlotView } from './PlotView';
 import ReactMarkdown from 'react-markdown';
 
 interface CellProps {
@@ -172,6 +173,7 @@ export const Cell: React.FC<CellProps> = ({
                     output={cell.output} 
                     status={cell.status} 
                     type={cell.type}
+                    plots={cell.plots}
                 />
             )}
         </div>
