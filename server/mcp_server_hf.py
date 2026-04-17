@@ -5,6 +5,8 @@ from mcp.server.stdio import stdio_server
 import mcp.types as types
 from huggingface_hub import HfApi
 import os
+import psutil
+import torch
 from dotenv import load_dotenv
 
 # Load token
@@ -66,6 +68,14 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["model_id"],
             },
+        ),
+        types.Tool(
+            name="get_system_specs",
+            description="Get local hardware specifications (CPU, RAM, GPU) for training estimation.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+            },
         )
     ]
 
@@ -115,6 +125,8 @@ async def handle_call_tool(
         base_model = arguments.get("base_model")
         dataset_id = arguments.get("dataset_id")
         hardware = arguments.get("hardware_target", "CPU")
+        epochs = arguments.get("epochs", 3)
+        rank = arguments.get("rank", 16)
         
         script = f'''# Universal SFT Training Script with LoRA - VML Studio
 import os
@@ -130,8 +142,11 @@ model_id = "{base_model}"
 dataset_id = "{dataset_id}"
 hardware = "{hardware}"
 device = "cuda" if torch.cuda.is_available() and hardware.upper() == "GPU" else "cpu"
+rank = {rank}
+epochs = {epochs}
 
 print(f"🚀 Initializing LoRA SFT: {{model_id}} on {{dataset_id}} ({{device}})")
+print(f"🧬 SFT Parameters: Rank: {{rank}}, Epochs: {{epochs}}")
 
 # 1. Load Tokenizer & Model
 tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -148,8 +163,8 @@ model = AutoModelForCausalLM.from_pretrained(
 # 2. Configure LoRA
 print("💡 Applying LoRA adapter...")
 peft_config = LoraConfig(
-    r=16,
-    lora_alpha=32,
+    r=rank,
+    lora_alpha=rank * 2,
     target_modules="all-linear",
     lora_dropout=0.05,
     bias="none",
@@ -180,7 +195,7 @@ sft_config = SFTConfig(
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
-    num_train_epochs=1,
+    num_train_epochs=epochs,
     use_cpu=(device == "cpu"),
     logging_steps=5,
     max_steps=20,
@@ -243,6 +258,41 @@ except Exception as e:
     print(f"⚠️ Failed to import into Ollama: {{e}}")
 '''
         return [types.TextContent(type="text", text=script)]
+
+    elif name == "get_system_specs":
+        import platform
+        import json
+        
+        # CPU & RAM - Guaranteed Fast
+        cpu_count = psutil.cpu_count(logical=True)
+        ram_total = round(psutil.virtual_memory().total / (1024**3), 2)
+        
+        gpu_info = {"available": False, "name": "N/A", "vram_gb": 0}
+        
+        # GPU - Safe Check (Avoid full torch init hang)
+        try:
+            # We only check torch if we have some evidence of NVIDIA hardware
+            # This avoids the driver hang on CPU-only systems
+            has_gpu_env = os.system("nvidia-smi > nul 2>&1") == 0
+            if has_gpu_env:
+                import torch
+                if torch.cuda.is_available():
+                    gpu_info = {
+                        "available": True,
+                        "name": torch.cuda.get_device_name(0),
+                        "vram_gb": round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 2)
+                    }
+        except:
+            pass # Fallback to CPU-only info if torch/nvidia-smi fails or hangs
+        
+        specs = {
+            "os": platform.system(),
+            "cpu_threads": cpu_count,
+            "ram_gb": ram_total,
+            "gpu": gpu_info
+        }
+        
+        return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(specs, indent=2)}")]
 
     raise ValueError(f"Unknown tool: {name}")
 

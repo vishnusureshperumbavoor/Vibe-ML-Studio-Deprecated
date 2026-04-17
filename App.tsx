@@ -142,6 +142,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow'>('studio');
   const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
+  const [systemInfo, setSystemInfo] = useState<any>(null);
   const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string; models?: any[]}>({ status: 'testing' });
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
@@ -156,13 +157,32 @@ export default function App() {
     }
   };
 
+  const fetchSystemInfo = async () => {
+    try {
+      const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "get_system_specs", arguments: {} })
+      });
+      const data = await resp.json();
+      const text = data[0]?.text || "";
+      if (text.includes("[JSON_RESULTS]")) {
+        const jsonStr = text.split("[JSON_RESULTS]")[1].trim();
+        setSystemInfo(JSON.parse(jsonStr));
+      }
+    } catch (e) {
+      console.error("Failed to fetch system info:", e);
+    }
+  };
+
   useEffect(() => {
     checkOllamaStatus();
+    fetchSystemInfo();
     const interval = setInterval(checkOllamaStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string) => {
+  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => {
     setIsWorkflowExecuting(true);
     try {
       // 1. Call MCP to get script
@@ -171,7 +191,13 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "start_sft_job",
-          arguments: { base_model: modelId, dataset_id: datasetId, hardware_target: hardware }
+          arguments: { 
+            base_model: modelId, 
+            dataset_id: datasetId, 
+            hardware_target: hardware, 
+            epochs: epochs,
+            rank: rank
+          }
         })
       });
       const data = await resp.json();
@@ -990,7 +1016,7 @@ export default function App() {
               <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
               
               {workflowMode === 'finetune' ? (
-                <FineTuningPanel onStart={handleStartSFT} isExecuting={isWorkflowExecuting} />
+                <FineTuningPanel onStart={handleStartSFT} isExecuting={isWorkflowExecuting} systemInfo={systemInfo} />
               ) : (
                 <QuantizationPanel onStart={handleStartQuantization} isExecuting={isWorkflowExecuting} />
               )}
