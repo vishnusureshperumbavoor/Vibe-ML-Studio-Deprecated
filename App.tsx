@@ -32,6 +32,9 @@ import {
 import { VMLAgent } from "./services/vmlAgent";
 import { ThinkingView } from "./components/ThinkingView";
 import { ChatView } from "./components/ChatView";
+import { WorkFlowSwitcher } from "./components/WorkFlowSwitcher";
+import { FineTuningPanel } from "./components/FineTuningPanel";
+import { QuantizationPanel } from "./components/QuantizationPanel";
 
 const API_BASE = "http://127.0.0.1:2000";
 
@@ -136,7 +139,9 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [activeView, setActiveView] = useState<'studio' | 'chat'>('studio');
+  const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow'>('studio');
+  const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
+  const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string; models?: any[]}>({ status: 'testing' });
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
@@ -156,6 +161,68 @@ export default function App() {
     const interval = setInterval(checkOllamaStatus, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string) => {
+    setIsWorkflowExecuting(true);
+    try {
+      // 1. Call MCP to get script
+      const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "start_sft_job",
+          arguments: { base_model: modelId, dataset_id: datasetId, hardware_target: hardware }
+        })
+      });
+      const data = await resp.json();
+      const script = data[0]?.text || "";
+      
+      // 2. Add cell and execute
+      const cellId = uuidv4();
+      const newCell: CellData = { id: cellId, type: 'code', content: script, status: 'running' };
+      setCells(prev => [...prev, newCell]);
+      setActiveView('studio'); // Switch back to see output
+      
+      const result = await executeCode(script, (partial) => {
+        setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+      });
+      setCells(prev => prev.map(c => c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c));
+    } catch (e) {
+      console.error("SFT Failed:", e);
+    } finally {
+      setIsWorkflowExecuting(false);
+    }
+  };
+
+  const handleStartQuantization = async (modelId: string, bits: string) => {
+    setIsWorkflowExecuting(true);
+    try {
+      const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "start_quantization_job",
+          arguments: { model_id: modelId, bits: bits }
+        })
+      });
+      const data = await resp.json();
+      const script = data[0]?.text || "";
+      
+      const cellId = uuidv4();
+      const newCell: CellData = { id: cellId, type: 'code', content: script, status: 'running' };
+      setCells(prev => [...prev, newCell]);
+      setActiveView('studio');
+      
+      const result = await executeCode(script, (partial) => {
+        setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+      });
+      setCells(prev => prev.map(c => c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c));
+    } catch (e) {
+      console.error("Quantization Failed:", e);
+    } finally {
+      setIsWorkflowExecuting(false);
+    }
+  };
 
   const handleToggleConnector = (id: string) => {
     setConnectorSettings((prev) =>
@@ -841,7 +908,7 @@ export default function App() {
                   Auto-Pilot Active
                 </span>
               ) : (
-                "Your Intelligent Python notebook is here"
+                "Your helpful agent for fine tuning and quantization"
               )}
             </span>
           </div>
@@ -869,11 +936,18 @@ export default function App() {
               <span>Studio</span>
             </button>
             <button
+              onClick={() => setActiveView('workflow')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'workflow' ? 'bg-amber-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+            >
+              <Activity size={14} />
+              <span>Build</span>
+            </button>
+            <button
               onClick={() => setActiveView('chat')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'chat' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
             >
               <MessageSquare size={14} />
-              <span>Chat</span>
+              <span>Arena</span>
             </button>
           </div>
 
@@ -903,6 +977,25 @@ export default function App() {
             selectedModel={ollamaStatus.selectedModel || (ollamaStatus.models?.[0]?.name || '')}
             onModelChange={(model) => setOllamaStatus(prev => ({ ...prev, selectedModel: model }))}
           />
+        ) : activeView === 'workflow' ? (
+          <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">
+            <div className="text-center space-y-4 max-w-2xl">
+              <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Model Production Center</h2>
+              <p className="text-sm text-white/40">Select your workflow to begin local optimization. Fine-tune for personality, or quantize for maximum local performance.</p>
+            </div>
+            
+            <WorkFlowSwitcher active={workflowMode} onChange={setWorkflowMode} />
+            
+            <div className="w-full max-w-4xl bg-[#140F1D] border border-white/5 rounded-[32px] p-8 shadow-2xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
+              
+              {workflowMode === 'finetune' ? (
+                <FineTuningPanel onStart={handleStartSFT} isExecuting={isWorkflowExecuting} />
+              ) : (
+                <QuantizationPanel onStart={handleStartQuantization} isExecuting={isWorkflowExecuting} />
+              )}
+            </div>
+          </div>
         ) : (
           <>
             {/* Notebook Area */}
