@@ -280,6 +280,9 @@ export default function App() {
               const match = blockScript.match(/max_steps=(\d+)/);
               if (match) plotPoint.vml_total_steps = parseInt(match[1]);
             }
+            // Add arrival timestamp for live runtime calculation
+            plotPoint.timestamp = Date.now();
+            
             setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
           }
         );
@@ -819,6 +822,9 @@ export default function App() {
           const match = cell.content.match(/max_steps=(\d+)/);
           if (match) plotPoint.vml_total_steps = parseInt(match[1]);
         }
+        // Add arrival timestamp for live runtime calculation
+        plotPoint.timestamp = Date.now();
+
         setCells((prev) =>
           prev.map((c) => (c.id === id ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)),
         );

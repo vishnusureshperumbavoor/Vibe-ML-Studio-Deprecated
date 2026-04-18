@@ -10,7 +10,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { Activity, Zap, Target, Gauge } from 'lucide-react';
+import { Activity, Zap, Target, Gauge, Clock } from 'lucide-react';
 
 interface PlotPoint {
   vml_step: number;
@@ -66,10 +66,57 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
   const currentGradNorm = getLatestMetric('grad_norm');
   const currentAccuracy = getLatestMetric('mean_token_accuracy');
 
+  // Final Performance Metrics
+  const samplesPerSec = getLatestMetric('train_samples_per_second');
+  const stepsPerSec = getLatestMetric('train_steps_per_second');
+  const totalFlops = getLatestMetric('total_flos');
+  const tflops = totalFlops ? (Number(totalFlops) / 1e12).toFixed(2) : undefined;
+
+  // Live Runtime Calculation
+  const firstTime = data.find(d => d.timestamp)?.timestamp;
+  const lastTime = [...data].reverse().find(d => d.timestamp)?.timestamp;
+  let durationStr = '00:00';
+  if (firstTime && lastTime) {
+    const diff = Math.floor((lastTime - firstTime) / 1000);
+    const mins = Math.floor(diff / 60).toString().padStart(2, '0');
+    const secs = (diff % 60).toString().padStart(2, '0');
+    durationStr = `${mins}:${secs}`;
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
+      {/* Performance Summary - Appears on Completion */}
+      {samplesPerSec && (
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 animate-in slide-in-from-top duration-1000">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/10">
+              <Zap size={16} className="text-emerald-500" />
+            </div>
+            <div>
+              <h4 className="text-[10px] font-black text-emerald-500/60 uppercase tracking-[0.2em]">Training Complete</h4>
+              <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">Efficiency & Hardware Throughput Summary</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-8 pr-4">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Total Throughput</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{samplesPerSec} <span className="text-[8px] font-normal text-white/30">samples/s</span></span>
+            </div>
+            <div className="flex flex-col border-l border-white/5 pl-8">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Iteration Speed</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{stepsPerSec} <span className="text-[8px] font-normal text-white/30">steps/s</span></span>
+            </div>
+            <div className="flex flex-col border-l border-white/5 pl-8">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Computational Work</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{tflops} <span className="text-[8px] font-normal text-white/30">TFLOPs</span></span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Row: Main Stats View */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <MetricCard icon={<Clock size={14} className="text-blue-500" />} label="Runtime" value={durationStr} />
         <MetricCard icon={<Target size={14} className="text-amber-500" />} label="Loss" value={currentLoss} precision={3} trend={lossTrend} />
         <MetricCard icon={<Zap size={14} className="text-purple-500" />} label="Step" value={currentStep} total={totalSteps} />
         <MetricCard icon={<Gauge size={14} className="text-emerald-500" />} label="Grad Norm" value={currentGradNorm} precision={3} />
