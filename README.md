@@ -2,7 +2,6 @@
 npm install  
 npm run dev
 
-
 ## Backend
 cd server  
 .\venv\Scripts\Activate.ps1  

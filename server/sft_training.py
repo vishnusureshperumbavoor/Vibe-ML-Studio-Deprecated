@@ -22,6 +22,11 @@ except ImportError:
 model_id = "Qwen/Qwen2-0.5B"
 dataset_id = "yahma/alpaca-cleaned"
 hardware = "GPU"
+
+# Derive organized directory paths
+model_slug = model_id.split('/')[-1].lower().replace('.', '-')
+output_dir = f"./data/{model_slug}"
+
 device = "cuda" if torch.cuda.is_available() and hardware == "GPU" else "cpu"
 
 print(f"🚀 Starting Automated SFT Job: {model_id} on {dataset_id}")
@@ -59,7 +64,7 @@ model = AutoModelForCausalLM.from_pretrained(
 # 3. Setup Training Configuration
 print("⚙️ Configuring training parameters...")
 sft_config = SFTConfig(
-    output_dir="./vml_sft_output",
+    output_dir=output_dir,
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
@@ -84,18 +89,21 @@ trainer = SFTTrainer(
 print("🔥 Starting training loop...")
 trainer.train()
 
-print("💾 Saving final model weights...")
-os.makedirs("./vml_sft_output", exist_ok=True)
-trainer.save_model("./vml_sft_output")
+print(f"💾 Saving final model weights to {output_dir}...")
+os.makedirs(output_dir, exist_ok=True)
+trainer.save_model(output_dir)
 
 print("📦 Packaging model for Ollama...")
-modelfile_content = f"FROM ./vml_sft_output\n"
-with open("Modelfile", "w") as f:
+# Ollama LoRA support: FROM base, ADAPTER for weights
+modelfile_content = f"FROM {model_id}\nADAPTER .\n"
+modelfile_path = os.path.join(output_dir, "Modelfile")
+
+with open(modelfile_path, "w") as f:
     f.write(modelfile_content)
 
-print("Running 'ollama create vml-finetuned'...")
+print(f"Running 'ollama create vml-finetuned' from {modelfile_path}...")
 try:
-    subprocess.run(["ollama", "create", "vml-finetuned", "-f", "Modelfile"], check=True)
+    subprocess.run(["ollama", "create", "vml-finetuned", "-f", modelfile_path], check=True)
     print("✅ Model successfully imported into Ollama as 'vml-finetuned'!")
 except Exception as e:
     print(f"⚠️ Failed to import into Ollama: {e}")
