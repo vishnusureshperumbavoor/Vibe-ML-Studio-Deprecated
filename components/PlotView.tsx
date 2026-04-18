@@ -10,7 +10,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { Activity, Zap, Target, Gauge, Clock } from 'lucide-react';
+import { Activity, Zap, Target, Gauge, Clock, ChevronRight, Loader2, CheckCircle2 } from 'lucide-react';
 
 interface PlotPoint {
   vml_step: number;
@@ -23,6 +23,8 @@ interface PlotPoint {
 
 interface PlotViewProps {
   data: PlotPoint[];
+  onOpenArena?: (modelId: string) => void;
+  metadata?: Record<string, any>;
 }
 
 // Simple Moving Average for smoothing
@@ -38,8 +40,11 @@ const smoothData = (data: PlotPoint[], window: number = 5) => {
   });
 };
 
-export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
+export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata }) => {
   const processedData = useMemo(() => smoothData(data), [data]);
+  const [deployState, setDeployState] = React.useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
+  const [now, setNow] = React.useState(Date.now());
+  const hasTriggeredDeploy = React.useRef(false);
   
   if (!data || data.length === 0) {
     return (
@@ -71,10 +76,15 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
   const stepsPerSec = getLatestMetric('train_steps_per_second');
   const totalFlops = getLatestMetric('total_flos');
   const tflops = totalFlops ? (Number(totalFlops) / 1e12).toFixed(2) : undefined;
+  // Live Ticker for high-resolution clock
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Live Runtime Calculation
   const firstTime = data.find(d => d.timestamp)?.timestamp;
-  const lastTime = [...data].reverse().find(d => d.timestamp)?.timestamp;
+  const lastTime = samplesPerSec ? [...data].reverse().find(d => d.timestamp)?.timestamp : now;
+  
   let durationStr = '00:00';
   if (firstTime && lastTime) {
     const diff = Math.floor((lastTime - firstTime) / 1000);
@@ -83,34 +93,83 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
     durationStr = `${mins}:${secs}`;
   }
 
+  // Autonomous Handover Logic
+  React.useEffect(() => {
+    if (samplesPerSec && !hasTriggeredDeploy.current && deployState === 'idle') {
+      hasTriggeredDeploy.current = true;
+      handleAutoDeploy();
+    }
+  }, [samplesPerSec]);
+
+  const handleAutoDeploy = async () => {
+    setDeployState('deploying');
+    try {
+      const modelName = metadata?.model_name || "Vibe-Finetuned-Model";
+      const modelSlug = metadata?.model_slug || "qwen2-0-5b";
+
+      const resp = await fetch("http://127.0.0.1:2000/register_model", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model_name: modelName,
+          model_slug: modelSlug
+        })
+      });
+      if (!resp.ok) throw new Error("Deploy failed");
+      setDeployState('ready');
+    } catch (e) {
+      console.error(e);
+      setDeployState('error');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* Performance Summary - Appears on Completion */}
       {samplesPerSec && (
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 animate-in slide-in-from-top duration-1000">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/10">
-              <Zap size={16} className="text-emerald-500" />
+            <div className={`p-2 rounded-lg ${deployState === 'ready' ? 'bg-purple-500/20' : 'bg-emerald-500/10'}`}>
+              {deployState === 'deploying' ? <Loader2 size={16} className="text-purple-400 animate-spin" /> : 
+               deployState === 'ready' ? <CheckCircle2 size={16} className="text-purple-400" /> :
+               <Zap size={16} className="text-emerald-500" />}
             </div>
             <div>
-              <h4 className="text-[10px] font-black text-emerald-500/60 uppercase tracking-[0.2em]">Training Complete</h4>
-              <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">Efficiency & Hardware Throughput Summary</p>
+              <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${deployState === 'ready' ? 'text-purple-400' : 'text-emerald-500/60'}`}>
+                {deployState === 'deploying' ? 'Deploying to Arena...' : 
+                 deployState === 'ready' ? 'Model Ready in Arena' : 
+                 'Training Complete'}
+              </h4>
+              <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">
+                {deployState === 'deploying' ? 'Registering Adapter with Ollama' : 'Efficiency & Hardware Throughput Summary'}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-8 pr-4">
-            <div className="flex flex-col">
-              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Total Throughput</span>
-              <span className="text-sm font-black text-white/70 tabular-nums">{samplesPerSec} <span className="text-[8px] font-normal text-white/30">samples/s</span></span>
+          
+          {deployState === 'ready' ? (
+            <button 
+              onClick={() => onOpenArena?.(metadata?.model_name || "Vibe-Finetuned-Model")}
+              className="group flex items-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/40 animate-pulse hover:animate-none"
+            >
+              Open in Arena
+              <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          ) : (
+            <div className="flex items-center gap-8 pr-4">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Total Throughput</span>
+                <span className="text-sm font-black text-white/70 tabular-nums">{samplesPerSec} <span className="text-[8px] font-normal text-white/30">samples/s</span></span>
+              </div>
+              <div className="flex flex-col border-l border-white/5 pl-8">
+                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Iteration Speed</span>
+                <span className="text-sm font-black text-white/70 tabular-nums">{stepsPerSec} <span className="text-[8px] font-normal text-white/30">steps/s</span></span>
+              </div>
+              <div className="flex flex-col border-l border-white/5 pl-8">
+                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Computational Work</span>
+                <span className="text-sm font-black text-white/70 tabular-nums">{tflops} <span className="text-[8px] font-normal text-white/30">TFLOPs</span></span>
+              </div>
             </div>
-            <div className="flex flex-col border-l border-white/5 pl-8">
-              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Iteration Speed</span>
-              <span className="text-sm font-black text-white/70 tabular-nums">{stepsPerSec} <span className="text-[8px] font-normal text-white/30">steps/s</span></span>
-            </div>
-            <div className="flex flex-col border-l border-white/5 pl-8">
-              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Computational Work</span>
-              <span className="text-sm font-black text-white/70 tabular-nums">{tflops} <span className="text-[8px] font-normal text-white/30">TFLOPs</span></span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -245,13 +304,15 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
 };
 
 const MetricCard = ({ icon, label, value, total, precision, trend }: { icon: React.ReactNode, label: string, value: any, total?: any, precision?: number, trend?: number }) => {
-  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  // Only parse as number if it's not a clock string (MM:SS)
+  const isClock = typeof value === 'string' && value.includes(':');
+  const numericValue = (!isClock && typeof value === 'string') ? parseFloat(value) : value;
   const isNumber = typeof numericValue === 'number' && !isNaN(numericValue);
   
-  let displayValue: string | number = 'N/A';
+  let displayValue: string | number = value || 'N/A';
   if (total !== undefined && isNumber) {
     displayValue = `${numericValue} / ${total}`;
-  } else if (isNumber) {
+  } else if (isNumber && !isClock) {
     displayValue = precision !== undefined ? numericValue.toFixed(precision) : numericValue;
   }
 

@@ -45,6 +45,10 @@ class FileWriteRequest(BaseModel):
     filename: str
     content: str
 
+class RegisterRequest(BaseModel):
+    model_name: str
+    model_slug: str
+
 from fastapi.responses import StreamingResponse
 import json
 
@@ -230,6 +234,56 @@ async def get_image(filename: str):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(file_path)
+
+
+@app.post("/register_model")
+async def register_model(req: RegisterRequest):
+    """
+    Registers a fine-tuned model (LoRA adapter) with Ollama.
+    Uses relative slugs to ensure portability.
+    """
+    try:
+        # Resolve path relative to the server's data directory
+        abs_target_dir = os.path.join(DATA_DIR, req.model_slug)
+        
+        modelfile_path = os.path.join(abs_target_dir, "Modelfile")
+        if not os.path.exists(modelfile_path):
+            raise HTTPException(status_code=404, detail=f"Modelfile not found in {abs_target_dir}")
+
+        # Step 1: Pre-process Modelfile to ensure Ollama compatibility
+        with open(modelfile_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        
+        updated = False
+        for i, line in enumerate(lines):
+            # Map Qwen/Qwen2-0.5B to qwen2:0.5b for reliability
+            if "FROM Qwen/Qwen2-0.5B" in line:
+                lines[i] = "FROM qwen2:0.5b\n"
+                updated = True
+        
+        if updated:
+            with open(modelfile_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+        # Step 2: Execute 'ollama create'
+        cmd = ["ollama", "create", req.model_name, "-f", "Modelfile"]
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            cwd=abs_target_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            error_msg = stderr.decode().strip()
+            raise Exception(f"Ollama creation failed: {error_msg}")
+
+        return {"success": True, "message": f"Model {req.model_name} registered successfully."}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/save_token")

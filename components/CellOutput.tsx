@@ -12,9 +12,11 @@ interface CellOutputProps {
   executionCount?: number;
   type: 'code' | 'markdown' | 'query';
   plots?: any[];
+  onOpenArena?: (modelId: string) => void;
+  metadata?: Record<string, any>;
 }
 
-export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, plots }) => {
+export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, plots, onOpenArena, metadata }) => {
   const [wasCopied, setWasCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'console' | 'insights'>('console');
 
@@ -99,7 +101,7 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, pl
       <div className="bg-black/20 border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
         {activeTab === 'insights' && hasPlots ? (
           <div className="p-6">
-            <PlotView data={plots} />
+            <PlotView data={plots} onOpenArena={onOpenArena} metadata={metadata} />
           </div>
         ) : (
           <div className="p-4 relative group/output">

@@ -192,6 +192,20 @@ export default function App() {
     }
   };
 
+  const handleOpenArena = async (modelId: string) => {
+    // 1. Refresh models to ensure the newly registered one is in the list
+    await checkOllamaStatus();
+    
+    // 2. Pre-select the model
+    setOllamaStatus(prev => ({ 
+      ...prev, 
+      selectedModel: modelId 
+    }));
+    
+    // 3. Switch to Arena view
+    setActiveView('chat');
+  };
+
   const checkOllamaStatus = async () => {
     try {
       const resp = await fetch(`${API_BASE}/ollama_status`);
@@ -259,12 +273,20 @@ export default function App() {
       // 2. Add and Execute Cells Sequentially
       for (const blockScript of blocks) {
         const cellId = uuidv4();
+        // Derive metadata for autonomous handover (Portability: No absolute paths)
+        const modelSlug = modelId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'model';
+        const deploymentName = `${modelId.split('/').pop()}-Instruct-VML`;
+
         const newCell: CellData = { 
           id: cellId, 
           type: 'code', 
           content: blockScript, 
           status: 'running',
-          plots: [] 
+          plots: [],
+          metadata: {
+            model_name: deploymentName,
+            model_slug: modelSlug
+          }
         };
         
         setCells(prev => [...prev, newCell]);
@@ -1272,6 +1294,8 @@ export default function App() {
                         onMoveUp={(id) => moveCell(id, "up")}
                         onMoveDown={(id) => moveCell(id, "down")}
                         onTypeChange={updateCellType}
+                        onOpenArena={handleOpenArena}
+                        metadata={cell.metadata}
                       />
                     </div>
                     

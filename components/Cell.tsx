@@ -16,6 +16,8 @@ interface CellProps {
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
   onTypeChange: (id: string, type: 'code' | 'markdown') => void;
+  onOpenArena?: (modelId: string) => void;
+  metadata?: Record<string, any>;
 }
 
 export const Cell: React.FC<CellProps> = ({
@@ -27,7 +29,9 @@ export const Cell: React.FC<CellProps> = ({
   onDelete,
   onMoveUp,
   onMoveDown,
-  onTypeChange
+  onTypeChange,
+  onOpenArena,
+  metadata
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
@@ -181,6 +185,8 @@ export const Cell: React.FC<CellProps> = ({
                     status={cell.status} 
                     type={cell.type}
                     plots={cell.plots}
+                    onOpenArena={onOpenArena}
+                    metadata={metadata}
                 />
             )}
         </div>

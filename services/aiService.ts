@@ -108,6 +108,9 @@ export const executeCode = async (
                                             return acc;
                                         }, {});
                                         
+                                        // Inject high-resolution timestamp for live runtime tracking
+                                        normalized.timestamp = Date.now();
+                                        
                                         onPlotData(normalized);
                                     }
                                     

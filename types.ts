@@ -13,6 +13,7 @@ export interface CellData {
   executionCount?: number;
   lastRun?: number; // Timestamp
   plots?: any[];
+  metadata?: Record<string, any>;
 }
 
 export interface NotebookResponse {
