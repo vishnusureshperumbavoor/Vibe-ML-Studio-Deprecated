@@ -12,6 +12,9 @@ import {
   Activity,
   MessageSquare,
   Terminal,
+  CheckCircle2,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -27,6 +30,7 @@ import {
 } from "./types";
 import {
   executeCode,
+  fixCodeError,
   generateNotebookStructure,
 } from "./services/aiService";
 import { VMLAgent } from "./services/vmlAgent";
@@ -144,8 +148,49 @@ export default function App() {
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string; models?: any[]}>({ status: 'testing' });
+  const [wasCopyAllClicked, setWasCopyAllClicked] = useState(false);
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
+
+  const handleCopyAll = () => {
+    let context = "# VML STUDIO WORKFLOW REPORT\n\n";
+
+    if (thinkingHistory.length > 0) {
+      context += "## AGENT REASONING LOG\n";
+      thinkingHistory.forEach((t, i) => {
+        context += `${i + 1}. ${t}\n`;
+      });
+      context += "\n---\n\n";
+    }
+
+    cells.forEach((cell, index) => {
+      context += `## CELL ${index + 1} (${cell.type.toUpperCase()})\n`;
+      context += `**Status**: ${cell.status}\n\n`;
+      context += `### CONTENT\n\`\`\`${cell.type === 'code' ? 'python' : 'markdown'}\n${cell.content}\n\`\`\`\n\n`;
+      if (cell.output) {
+        context += `### OUTPUT\n\`\`\`text\n${cell.output}\n\`\`\`\n\n`;
+      }
+      context += "---\n\n";
+    });
+
+    navigator.clipboard.writeText(context);
+    setWasCopyAllClicked(true);
+    setTimeout(() => setWasCopyAllClicked(false), 2000);
+  };
+
+  const [isRestartingKernel, setIsRestartingKernel] = useState(false);
+  const handleRestartKernel = async () => {
+    setIsRestartingKernel(true);
+    try {
+      await fetch(`${API_BASE}/restart_kernel`, { method: "POST" });
+      setThinkingHistory(["Kernel restarted. Memory cleared."]);
+      setTimeout(() => setThinkingHistory([]), 3000);
+    } catch (e) {
+      console.error("Failed to restart kernel:", e);
+    } finally {
+      setIsRestartingKernel(false);
+    }
+  };
 
   const checkOllamaStatus = async () => {
     try {
@@ -240,7 +285,58 @@ export default function App() {
           output: result.error || result.text 
         } : c));
 
-        if (result.error) break; // Stop sequence on error
+        if (result.error && mode === 'agent') {
+          let currentError = result.text || result.error;
+          let currentCode = blockScript;
+          let recoverySuccess = false;
+
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            const nextId = uuidv4();
+            const nextCell: CellData = { 
+              id: nextId, 
+              type: 'code', 
+              content: `// VML Agent Recovery Attempt ${attempt}/3...`, 
+              status: 'running' 
+            };
+            setCells(prev => [...prev, nextCell]);
+            
+            setThinking(`[Attempt ${attempt}/3] Analyzing error and generating autonomous fix...`);
+            setThinkingHistory(prev => [...prev, `Recovery Attempt ${attempt}: Analyzing latest error trace...`]);
+            
+            const fixedCode = await fixCodeError(currentCode, currentError);
+            setCells(prev => prev.map(c => c.id === nextId ? { ...c, content: fixedCode, status: 'success' } : c));
+            
+            setThinkingHistory(prev => [...prev, `Fix ${attempt} generated. Executing...`]);
+            setThinking(null);
+
+            // Execute the fixed chunk
+            setCells(prev => prev.map(c => c.id === nextId ? { ...c, status: 'running' } : c));
+            const retryResult = await executeCode(
+               fixedCode,
+               (partial) => { setCells(prev => prev.map(c => c.id === nextId ? { ...c, output: partial } : c)); },
+               (plotPoint) => { setCells(prev => prev.map(c => c.id === nextId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)); }
+            );
+            
+            setCells(prev => prev.map(c => c.id === nextId ? { 
+              ...c, 
+              status: retryResult.error ? 'error' : 'success', 
+              output: retryResult.error || retryResult.text 
+            } : c));
+
+            if (!retryResult.error) {
+              recoverySuccess = true;
+              break; 
+            } else {
+              currentError = retryResult.error || retryResult.text;
+              currentCode = fixedCode;
+              setThinkingHistory(prev => [...prev, `Attempt ${attempt} failed. Re-evaluating...`]);
+            }
+          }
+
+          if (!recoverySuccess) break; // Break the whole sequence if we couldn't fix this block after 3 tries
+        } else if (result.error) {
+          break; // Manual mode, just stop
+        }
       }
     } catch (e) {
       console.error("SFT Failed:", e);
@@ -993,6 +1089,20 @@ export default function App() {
           >
             <Trash2 size={16} />
           </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleCopyAll}
+            title="Copy entire notebook context for AI"
+            className={`transition-all duration-300 ${wasCopyAllClicked ? 'text-emerald-400 bg-emerald-500/10' : 'text-purple-400'}`}
+          >
+            {wasCopyAllClicked ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+            <span className="ml-2 text-[10px] font-bold tracking-widest uppercase">
+              {wasCopyAllClicked ? "COPIED" : "COPY ALL"}
+            </span>
+          </Button>
+
           <div className="h-4 w-px bg-[#352554] mx-2"></div>
 
           {/* View Switcher */}

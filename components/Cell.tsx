@@ -35,7 +35,14 @@ export const Cell: React.FC<CellProps> = ({
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(cell.content);
+    
+    let textToCopy = `### CELL CODE\n\`\`\`python\n${cell.content}\n\`\`\``;
+    
+    if (cell.output) {
+      textToCopy += `\n\n### CELL OUTPUT (Status: ${cell.status})\n\`\`\`text\n${cell.output}\n\`\`\``;
+    }
+
+    navigator.clipboard.writeText(textToCopy);
     setWasCopied(true);
     setTimeout(() => setWasCopied(false), 2000);
   };

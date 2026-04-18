@@ -211,6 +211,9 @@ sft_config = SFTConfig(
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",
+    fp16=False,
+    bf16=False,
+    packing=False,
 )
 
 trainer = SFTTrainer(

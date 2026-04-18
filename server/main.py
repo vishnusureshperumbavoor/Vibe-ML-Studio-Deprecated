@@ -61,18 +61,18 @@ def get_skill_paths():
             paths.append(os.path.abspath(ref_path).replace("\\", "/"))
     return paths
 
+from kernel import kernel_manager
+
 @app.post("/execute")
 async def execute_code(req: ExecuteRequest):
     code_lines = req.code.splitlines()
-    
-    # Automatic Skill Linking: Include all skill reference paths in sys.path
     skill_paths = get_skill_paths()
     python_code_lines = [
         "import os, sys",
         f"sys.path.extend({json.dumps(skill_paths)})"
     ]
     
-    # 1. Intercept "Magic Pip" Commands and convert others to os.system
+    # 1. Intercept "Magic Pip" Commands and convert to os.system for the kernel
     BUILT_INS = {"os", "sys", "urllib", "zipfile", "zipfile36", "tarfile", "time", "json", "math", "re", "shutil", "tempfile", "requests"}
     
     for line in code_lines:
@@ -80,15 +80,14 @@ async def execute_code(req: ExecuteRequest):
         if stripped.startswith("!") or stripped.startswith("%"):
             if "pip install" in stripped:
                 packages = stripped.replace("!pip install", "").replace("%pip install", "").strip().split()
-                # FILTER: Remove any built-in modules accidentally included by AI
                 packages = [p for p in packages if p.lower() not in BUILT_INS]
-                
                 if packages:
-                    subprocess.run([sys.executable, "-m", "pip", "install"] + packages)
+                    pkg_str = " ".join(packages)
+                    python_code_lines.append(f'import os; os.system("{sys.executable} -m pip install {pkg_str}")')
                 continue 
             
             command = stripped.lstrip("!%")
-            python_code_lines.append(line.replace(stripped, f'os.system("{command}")'))
+            python_code_lines.append(f'import os; os.system("{command}")')
             continue 
             
         python_code_lines.append(line)
@@ -96,63 +95,37 @@ async def execute_code(req: ExecuteRequest):
     clean_code = '\n'.join(python_code_lines)
 
     async def stream_output():
-        temp_path = None
-        process = None
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(clean_code)
-                temp_path = f.name
-                
-            # Use asyncio.create_subprocess_exec for non-blocking I/O
-            process = await asyncio.create_subprocess_exec(
-                sys.executable, "-u", temp_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
-            )
-            
             is_gradio = False
-            
-            # Read output in chunks as it arrives to capture \r for progress bars
-            while True:
-                chunk_bytes = await process.stdout.read(1024)
-                if not chunk_bytes:
-                    break
-                    
-                line = chunk_bytes.decode('utf-8', errors='replace')
+            has_error = False
+            async for line in kernel_manager.execute(clean_code):
+                # Clean prompt noise
+                clean_line = line.lstrip('> ').lstrip('. ').replace('\r', '\n')
                 
-                # Option 1: Convert carriage returns to newlines for text-based progress bars
-                line = line.replace('\r', '\n')
-                
+                # Detect Tracebacks for error reporting (since kernel doesn't exit)
+                if "Traceback (most recent call last):" in line or "NameError:" in line or "ValueError:" in line:
+                    has_error = True
+
                 # Detect Gradio startup
-                if "Running on local URL" in line:
+                if "Running on local URL" in clean_line:
                     is_gradio = True
-                    yield f"data: {json.dumps({'output': line, 'is_done': True, 'is_gradio': True})}\n\n"
+                    yield f"data: {json.dumps({'output': clean_line, 'is_done': True, 'is_gradio': True})}\n\n"
                 
-                yield f"data: {json.dumps({'output': line, 'is_done': False})}\n\n"
-            
-            # Wait for process to finish
-            return_code = await process.wait()
+                yield f"data: {json.dumps({'output': clean_line, 'is_done': False})}\n\n"
             
             if not is_gradio:
-                yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': return_code != 0})}\n\n"
+                yield f"data: {json.dumps({'output': '', 'is_done': True, 'is_error': has_error})}\n\n"
             
-        except asyncio.CancelledError:
-            pass
         except Exception as e:
             yield f"data: {json.dumps({'output': str(e), 'is_done': True, 'is_error': True})}\n\n"
-        finally:
-            if process and process.returncode is None:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    pass
 
     return StreamingResponse(stream_output(), media_type="text/event-stream")
+
+@app.post("/restart_kernel")
+async def restart_kernel():
+    await kernel_manager.stop()
+    await kernel_manager.start()
+    return {"status": "Kernel restarted"}
 
 @app.get("/list_skills")
 async def list_skills():
