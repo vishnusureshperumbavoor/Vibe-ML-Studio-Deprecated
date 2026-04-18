@@ -49,23 +49,38 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
     );
   }
 
-  const lastPoint = data[data.length - 1];
+  const getLatestMetric = (key: string, altKey?: string) => {
+    for (let i = data.length - 1; i >= 0; i--) {
+      if (data[i][key] !== undefined && data[i][key] !== null) return data[i][key];
+      if (altKey && data[i][altKey] !== undefined && data[i][altKey] !== null) return data[i][altKey];
+    }
+    return undefined;
+  };
+
+  const currentLoss = getLatestMetric('loss', 'train_loss');
+  const previousLoss = data.length > 1 ? (data[data.length - 2].loss || data[data.length - 2].train_loss) : undefined;
+  const lossTrend = (currentLoss && previousLoss) ? ((currentLoss - previousLoss) / previousLoss) * 100 : undefined;
+
+  const currentStep = getLatestMetric('vml_step');
+  const totalSteps = getLatestMetric('vml_total_steps');
+  const currentGradNorm = getLatestMetric('grad_norm');
+  const currentAccuracy = getLatestMetric('mean_token_accuracy');
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
       {/* Top Row: Main Stats View */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard icon={<Target size={14} className="text-amber-500" />} label="Loss" value={lastPoint.loss?.toFixed(4) || 'N/A'} trend={-5} />
-        <MetricCard icon={<Zap size={14} className="text-purple-500" />} label="Step" value={lastPoint.vml_step} />
-        <MetricCard icon={<Gauge size={14} className="text-emerald-500" />} label="Grad Norm" value={lastPoint.grad_norm?.toFixed(2) || 'N/A'} />
-        <MetricCard icon={<Activity size={14} className="text-blue-500" />} label="Epoch" value={lastPoint.vml_epoch?.toFixed(2) || 'N/A'} />
+        <MetricCard icon={<Target size={14} className="text-amber-500" />} label="Loss" value={currentLoss} precision={3} trend={lossTrend} />
+        <MetricCard icon={<Zap size={14} className="text-purple-500" />} label="Step" value={currentStep} total={totalSteps} />
+        <MetricCard icon={<Gauge size={14} className="text-emerald-500" />} label="Grad Norm" value={currentGradNorm} precision={3} />
+        <MetricCard icon={<Activity size={14} className="text-emerald-500" />} label="Accuracy" value={currentAccuracy} precision={3} />
       </div>
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Training Loss - The Master Chart */}
         <ChartContainer title="Training Loss" subtitle="Raw vs Smoothed (EMA)">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={processedData}>
               <defs>
                 <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
@@ -88,7 +103,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
 
         {/* Learning Rate - Scheduled Decay */}
         <ChartContainer title="Learning Rate" subtitle="Scheduled Steps">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
               <XAxis dataKey="vml_step" hide />
@@ -104,7 +119,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
 
         {/* Gradient Norm - Stability Tracker */}
         <ChartContainer title="Gradient Norm" subtitle="Numerical Stability">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
               <XAxis dataKey="vml_step" hide />
@@ -118,33 +133,106 @@ export const PlotView: React.FC<PlotViewProps> = ({ data }) => {
           </ResponsiveContainer>
         </ChartContainer>
 
-        {/* Evaluation Holder */}
-        <div className="rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col items-center justify-center p-8 text-center space-y-2 opacity-50">
-            <Activity size={24} className="text-white/10" />
-            <h4 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em]">Evaluation not configured</h4>
-            <p className="text-[9px] text-white/20 uppercase tracking-widest max-w-[200px]">Set evaluation_dataset to track validation metrics</p>
-        </div>
+        {/* Token Accuracy - The "Learning" Metric */}
+        <ChartContainer title="Token Accuracy" subtitle="Mean Next-Token Match">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="colorAcc" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+              <XAxis dataKey="vml_step" hide />
+              <YAxis domain={[0, 1]} hide />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
+                itemStyle={{ color: '#10B981' }}
+              />
+              <Area type="monotone" dataKey="mean_token_accuracy" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorAcc)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+
+        {/* Model Entropy - Uncertainty Monitor */}
+        <ChartContainer title="Model Entropy" subtitle="Prediction Uncertainty">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="colorEntropy" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#F59E0B" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+              <XAxis dataKey="vml_step" hide />
+              <YAxis domain={['auto', 'auto']} hide />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
+                itemStyle={{ color: '#F59E0B' }}
+              />
+              <Area type="monotone" dataKey="entropy" stroke="#F59E0B" strokeWidth={2} fillOpacity={1} fill="url(#colorEntropy)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartContainer>
+
+        {/* Token Throughout - Cumulative Volume */}
+        <ChartContainer title="Token Throughput" subtitle="Cumulative Dataset Volume">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+              <XAxis dataKey="vml_step" hide />
+              <YAxis domain={['auto', 'auto']} hide />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
+                itemStyle={{ color: '#3B82F6' }}
+              />
+              <Line type="monotone" dataKey="num_tokens" stroke="#3B82F6" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartContainer>
       </div>
     </div>
   );
 };
 
-const MetricCard = ({ icon, label, value, trend }: { icon: React.ReactNode, label: string, value: any, trend?: number }) => (
-  <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 space-y-1 hover:bg-white/[0.05] transition-colors">
-    <div className="flex items-center gap-2 mb-1">
-      {icon}
-      <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">{label}</span>
-    </div>
-    <div className="flex items-baseline gap-2">
-      <span className="text-lg font-black text-white/80 tabular-nums">{value}</span>
-      {trend && (
-        <span className={`text-[8px] font-bold ${trend < 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-          {trend > 0 ? '+' : ''}{trend}%
-        </span>
+const MetricCard = ({ icon, label, value, total, precision, trend }: { icon: React.ReactNode, label: string, value: any, total?: any, precision?: number, trend?: number }) => {
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  const isNumber = typeof numericValue === 'number' && !isNaN(numericValue);
+  
+  let displayValue: string | number = 'N/A';
+  if (total !== undefined && isNumber) {
+    displayValue = `${numericValue} / ${total}`;
+  } else if (isNumber) {
+    displayValue = precision !== undefined ? numericValue.toFixed(precision) : numericValue;
+  }
+
+  return (
+    <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-4 space-y-1 hover:bg-white/[0.05] transition-colors">
+      <div className="flex items-center gap-2 mb-1">
+        {icon}
+        <span className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em]">{label}</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-lg font-black text-white/80 tabular-nums whitespace-nowrap">{displayValue}</span>
+        {trend !== undefined && (
+          <span className={`text-[8px] font-bold ${trend < 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+            {trend > 0 ? '+' : ''}{trend.toFixed(2)}%
+          </span>
+        )}
+      </div>
+      {total && isNumber && (
+        <div className="mt-2 h-1 w-full bg-white/5 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)] transition-all duration-700 ease-out"
+            style={{ width: `${Math.min(100, (numericValue / total) * 100)}%` }}
+          />
+        </div>
       )}
     </div>
-  </div>
-);
+  );
+};
 
 const ChartContainer = ({ title, subtitle, children }: { title: string, subtitle: string, children: React.ReactNode }) => (
   <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-5 space-y-4">

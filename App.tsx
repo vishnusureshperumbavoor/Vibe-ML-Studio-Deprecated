@@ -275,6 +275,11 @@ export default function App() {
             setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
           },
           (plotPoint) => {
+            // Heuristic: If missing total steps, try to find in script
+            if (!plotPoint.vml_total_steps) {
+              const match = blockScript.match(/max_steps=(\d+)/);
+              if (match) plotPoint.vml_total_steps = parseInt(match[1]);
+            }
             setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
           }
         );
@@ -809,6 +814,11 @@ export default function App() {
         );
       },
       (plotPoint) => {
+        // Heuristic: If missing total steps, try to find in script
+        if (!plotPoint.vml_total_steps) {
+          const match = cell.content.match(/max_steps=(\d+)/);
+          if (match) plotPoint.vml_total_steps = parseInt(match[1]);
+        }
         setCells((prev) =>
           prev.map((c) => (c.id === id ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)),
         );

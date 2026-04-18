@@ -72,7 +72,19 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, pl
             </button>
           )}
         </div>
-        <span className="text-[8px] font-bold text-white/5 uppercase tracking-[0.3em]">Stream Execution</span>
+        <div className="flex items-center gap-2">
+            {output && (
+                <button 
+                  onClick={handleCopy}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider transition-all
+                    ${wasCopied ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/20 hover:text-white/40 hover:bg-white/5'}
+                  `}
+                >
+                  <Copy size={10} />
+                  {wasCopied ? 'Copied' : 'Copy Console'}
+                </button>
+            )}
+        </div>
       </div>
 
       {/* Auto-Fixing Banner */}

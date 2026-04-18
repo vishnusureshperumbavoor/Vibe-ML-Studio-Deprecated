@@ -95,13 +95,26 @@ export const executeCode = async (
                                 try {
                                     const parts = chunk.split('[VML_DATA]');
                                     const jsonPart = parts[1].trim();
-                                    // Extract simple JSON object
-                                    const match = jsonPart.match(/^(\{.*\})/);
+                                    
+                                    // Robust match for JSON objects even with newlines
+                                    const match = jsonPart.match(/^(\{[\s\S]*?\})/);
                                     if (match && onPlotData) {
-                                        onPlotData(JSON.parse(match[1]));
+                                        const parsed = JSON.parse(match[1]);
+                                        
+                                        // Data Normalization: Convert numeric strings to actual Numbers
+                                        const normalized = Object.entries(parsed).reduce((acc: any, [k, v]) => {
+                                            const num = Number(v);
+                                            acc[k] = (typeof v === 'string' && v.trim() !== '' && !isNaN(num)) ? num : v;
+                                            return acc;
+                                        }, {});
+                                        
+                                        onPlotData(normalized);
                                     }
-                                    // Remove the tag from terminal output
-                                    chunk = parts[0] + (parts[1].split('}')[1] || '');
+                                    
+                                    // Remove the tag and the JSON block from terminal output
+                                    const jsonStr = match ? match[1] : '';
+                                    const remaining = jsonPart.substring(jsonStr.length);
+                                    chunk = parts[0] + remaining;
                                 } catch (e) {
                                     console.warn("Plot data parse error", e);
                                 }

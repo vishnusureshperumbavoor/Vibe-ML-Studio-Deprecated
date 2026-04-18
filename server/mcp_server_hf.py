@@ -202,6 +202,7 @@ class VMLReportingCallback(transformers.TrainerCallback):
         if logs:
             logs["vml_step"] = state.global_step
             logs["vml_epoch"] = state.epoch
+            logs["vml_total_steps"] = state.max_steps
             print(f"[VML_DATA] {{json.dumps(logs)}}")
 
 sft_config = SFTConfig(
