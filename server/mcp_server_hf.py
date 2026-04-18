@@ -128,6 +128,10 @@ async def handle_call_tool(
         epochs = arguments.get("epochs", 3)
         rank = arguments.get("rank", 16)
         
+        # Derive a safe directory name from the model ID
+        model_slug = base_model.split('/')[-1].lower().replace('.', '-')
+        output_dir = f"./data/{model_slug}"
+        
         # Split into logical blocks for the notebook
         blocks = [
             f"""# Block 1: Setup and Environment
@@ -201,7 +205,7 @@ class VMLReportingCallback(transformers.TrainerCallback):
             print(f"[VML_DATA] {{json.dumps(logs)}}")
 
 sft_config = SFTConfig(
-    output_dir="./vml_sft_output",
+    output_dir="{output_dir}",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
@@ -228,16 +232,19 @@ print("Starting training loop...")
 trainer.train()
 """,
             f"""# Block 5: Export and Integration
-print("Saving LoRA adapters...")
-trainer.save_model("./vml_sft_output")
+print(f"Saving LoRA adapters to {output_dir}...")
+trainer.save_model("{output_dir}")
 
 print("Packaging for Ollama...")
-modelfile_content = f"FROM ./vml_sft_output\\n"
-with open("Modelfile", "w") as f:
+# Ollama LoRA support: FROM the base model, ADAPTER for the fine-tuned folder
+modelfile_content = f"FROM {base_model}\\nADAPTER .\\n"
+modelfile_path = f"{output_dir}/Modelfile"
+
+with open(modelfile_path, "w") as f:
     f.write(modelfile_content)
 
 try:
-    subprocess.run(["ollama", "create", "vml-finetuned", "-f", "Modelfile"], check=True)
+    subprocess.run(["ollama", "create", "vml-finetuned", "-f", modelfile_path], check=True)
     print("Model successfully imported into Ollama as 'vml-finetuned'!")
 except Exception as e:
     print(f"Failed to import into Ollama: {{e}}")

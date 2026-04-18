@@ -30,6 +30,22 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, pl
 
   const hasPlots = plots && plots.length > 0;
 
+
+  // Pattern to identify tqdm-style progress bars: "Label: 40%|...| 117/290 [stats]"
+  const PROGRESS_BAR_REGEX = /^\s*(?:(.*?):\s*)?(\d+)%\|.*?\|\s*(\d+)\/(\d+)\s*\[(.*?)\]/;
+
+  const lines = output?.split('\n') || [];
+  
+  // Find the last occurrence of each progress bar label to avoid duplicate bars
+  const latestProgressIndices = new Map<string, number>();
+  lines.forEach((line, i) => {
+      const match = line.match(PROGRESS_BAR_REGEX);
+      if (match) {
+          const label = match[1] || 'Downloading';
+          latestProgressIndices.set(label, i);
+      }
+  });
+
   if (!output && !hasPlots && status !== 'error' && status !== 'fixing') return null;
 
   return (
@@ -95,16 +111,36 @@ export const CellOutput: React.FC<CellOutputProps> = ({ output, status, type, pl
             ) : (
                 // Standard Output
                 <div className="font-mono text-[11px] leading-relaxed text-gray-400 whitespace-pre-wrap overflow-x-auto max-h-[500px] custom-scrollbar">
-                    {output?.split('\n').map((line, i) => {
+                    {lines.map((line, i) => {
                         const imgMatch = line.match(/\[IMAGE:\s*(.*?)\]/);
                         if (imgMatch) return <RenderedImage key={i} source={imgMatch[1].trim()} />;
-                        const progressMatch = line.match(/^\s*(.*?):\s*(\d+)%\|.*?\|\s*(\d+)\/(\d+)\s*\[(.*?)\]/);
+                        
+                        const progressMatch = line.match(PROGRESS_BAR_REGEX);
                         if (progressMatch) {
-                            return <ProgressBar key={i} label={progressMatch[1]} percentage={progressMatch[2]} current={progressMatch[3]} total={progressMatch[4]} stats={progressMatch[5]} />;
+                            const label = progressMatch[1] || 'Downloading';
+                            // Only show the most recent progress bar for this label
+                            if (latestProgressIndices.get(label) !== i) return null;
+
+                            return (
+                                <ProgressBar 
+                                    key={i} 
+                                    label={label} 
+                                    percentage={progressMatch[2]} 
+                                    current={progressMatch[3]} 
+                                    total={progressMatch[4]} 
+                                    stats={progressMatch[5]} 
+                                />
+                            );
                         }
+
                         if (line.includes("Warning: You are sending unauthenticated requests to the HF Hub")) {
                            return <HuggingFaceAuth key={i} envKey="HF_TOKEN" placeholder="hf_..." />;
                         }
+
+                        // Hide progress-bar noise like "Loading weights" if it's on a separate line
+                        const isNoise = line.trim() === "Loading weights" || line.includes("Loading weights...") || line.includes("Using pad_token");
+                        if (isNoise) return null;
+
                         return <div key={i} className={line.includes('Loading weights') ? 'hidden' : ''}>{line}</div>;
                     })}
                 </div>
