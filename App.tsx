@@ -273,9 +273,10 @@ export default function App() {
       // 2. Add and Execute Cells Sequentially
       for (const blockScript of blocks) {
         const cellId = uuidv4();
-        // Derive metadata for autonomous handover (Portability: No absolute paths)
-        const modelSlug = modelId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'model';
-        const deploymentName = `${modelId.split('/').pop()}-Instruct-VML`;
+        const modelPart = modelId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'model';
+        const datasetPart = datasetId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'dataset';
+        const modelSlug = `${modelPart}-${datasetPart}-instruct-vml1`;
+        const deploymentName = modelSlug; // Keep them consistent for simplicity and clarity
 
         const newCell: CellData = { 
           id: cellId, 

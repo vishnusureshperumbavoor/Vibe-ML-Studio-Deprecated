@@ -128,8 +128,10 @@ async def handle_call_tool(
         epochs = arguments.get("epochs", 3)
         rank = arguments.get("rank", 16)
         
-        # Derive a safe directory name from the model ID
-        model_slug = base_model.split('/')[-1].lower().replace('.', '-')
+        # Derive a descriptive name: parent-model-dataset-instruct-vml1
+        model_name_part = base_model.split('/')[-1].lower().replace('.', '-')
+        dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
+        model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
         output_dir = f"./data/{model_slug}"
         
         # Split into logical blocks for the notebook
@@ -245,8 +247,9 @@ with open(modelfile_path, "w") as f:
     f.write(modelfile_content)
 
 try:
-    subprocess.run(["ollama", "create", "vml-finetuned", "-f", modelfile_path], check=True)
-    print("Model successfully imported into Ollama as 'vml-finetuned'!")
+    # Crucial: Run from within the data folder so ADAPTER . works correctly
+    subprocess.run(["ollama", "create", "{model_slug}", "-f", "Modelfile"], cwd="{output_dir}", check=True)
+    print(f"Model successfully imported into Ollama as '{model_slug}'!")
 except Exception as e:
     print(f"Failed to import into Ollama: {{e}}")
 

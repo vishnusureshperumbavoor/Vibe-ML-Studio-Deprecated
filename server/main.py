@@ -239,51 +239,73 @@ async def get_image(filename: str):
 @app.post("/register_model")
 async def register_model(req: RegisterRequest):
     """
-    Registers a fine-tuned model (LoRA adapter) with Ollama.
-    Uses relative slugs to ensure portability.
+    Registers a fine-tuned model (LoRA adapter) with Ollama using a streaming response
+    to provide real-time status updates (checking, pulling, creating).
     """
-    try:
-        # Resolve path relative to the server's data directory
-        abs_target_dir = os.path.join(DATA_DIR, req.model_slug)
-        
-        modelfile_path = os.path.join(abs_target_dir, "Modelfile")
-        if not os.path.exists(modelfile_path):
-            raise HTTPException(status_code=404, detail=f"Modelfile not found in {abs_target_dir}")
+    async def status_stream():
+        try:
+            # 1. Resolve path
+            abs_target_dir = os.path.join(DATA_DIR, req.model_slug)
+            modelfile_path = os.path.join(abs_target_dir, "Modelfile")
+            
+            yield f"data: {json.dumps({'status': 'checking', 'message': 'Verifying Modelfile...'})}\n\n"
+            
+            if not os.path.exists(modelfile_path):
+                yield f"data: {json.dumps({'status': 'error', 'message': f'Modelfile not found in {req.model_slug}'})}\n\n"
+                return
 
-        # Step 1: Pre-process Modelfile to ensure Ollama compatibility
-        with open(modelfile_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        
-        updated = False
-        for i, line in enumerate(lines):
-            # Map Qwen/Qwen2-0.5B to qwen2:0.5b for reliability
-            if "FROM Qwen/Qwen2-0.5B" in line:
-                lines[i] = "FROM qwen2:0.5b\n"
-                updated = True
-        
-        if updated:
-            with open(modelfile_path, "w", encoding="utf-8") as f:
-                f.writelines(lines)
+            # 2. Pre-process Modelfile
+            with open(modelfile_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            updated = False
+            for i, line in enumerate(lines):
+                if "FROM Qwen/Qwen2-0.5B" in line:
+                    lines[i] = "FROM qwen2:0.5b\n"
+                    updated = True
+            
+            if updated:
+                with open(modelfile_path, "w", encoding="utf-8") as f:
+                    f.writelines(lines)
 
-        # Step 2: Execute 'ollama create'
-        cmd = ["ollama", "create", req.model_name, "-f", "Modelfile"]
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=abs_target_dir,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        stdout, stderr = await process.communicate()
-        
-        if process.returncode != 0:
-            error_msg = stderr.decode().strip()
-            raise Exception(f"Ollama creation failed: {error_msg}")
+            # 3. Ensure Base Model exists (Agentic Pull)
+            base_model_tag = "qwen2:0.5b"
+            
+            check_cmd = ["ollama", "list"]
+            list_proc = await asyncio.create_subprocess_exec(*check_cmd, stdout=asyncio.subprocess.PIPE)
+            stdout_list, _ = await list_proc.communicate()
+            
+            if base_model_tag not in stdout_list.decode():
+                 yield f"data: {json.dumps({'status': 'pulling', 'message': f'Pulling base model ({base_model_tag})... This may take a minute.'})}\n\n"
+                 pull_cmd = ["ollama", "pull", base_model_tag]
+                 # We wait for pull to complete
+                 pull_process = await asyncio.create_subprocess_exec(*pull_cmd)
+                 await pull_process.wait()
 
-        return {"success": True, "message": f"Model {req.model_name} registered successfully."}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            # 4. Execute 'ollama create'
+            yield f"data: {json.dumps({'status': 'creating', 'message': f'Registering {req.model_name} with Ollama...'})}\n\n"
+            
+            cmd = ["ollama", "create", req.model_name, "-f", "Modelfile"]
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=abs_target_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                error_msg = stderr.decode().strip()
+                yield f"data: {json.dumps({'status': 'error', 'message': f'Ollama Error: {error_msg}'})}\n\n"
+                return
+
+            yield f"data: {json.dumps({'status': 'success', 'message': f'Model {req.model_name} is ready for Arena!'})}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(status_stream(), media_type="text/event-stream")
 
 
 @app.post("/save_token")

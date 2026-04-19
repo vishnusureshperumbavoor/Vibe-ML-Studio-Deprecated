@@ -24,7 +24,9 @@ dataset_id = "yahma/alpaca-cleaned"
 hardware = "GPU"
 
 # Derive organized directory paths
-model_slug = model_id.split('/')[-1].lower().replace('.', '-')
+model_name_part = model_id.split('/')[-1].lower().replace('.', '-')
+dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
+model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
 output_dir = f"./data/{model_slug}"
 
 device = "cuda" if torch.cuda.is_available() and hardware == "GPU" else "cpu"
@@ -101,10 +103,10 @@ modelfile_path = os.path.join(output_dir, "Modelfile")
 with open(modelfile_path, "w") as f:
     f.write(modelfile_content)
 
-print(f"Running 'ollama create vml-finetuned' from {modelfile_path}...")
+print(f"Running 'ollama create {model_slug}' from {modelfile_path}...")
 try:
-    subprocess.run(["ollama", "create", "vml-finetuned", "-f", modelfile_path], check=True)
-    print("✅ Model successfully imported into Ollama as 'vml-finetuned'!")
+    subprocess.run(["ollama", "create", model_slug, "-f", modelfile_path], check=True)
+    print(f"✅ Model successfully imported into Ollama as '{model_slug}'!")
 except Exception as e:
     print(f"⚠️ Failed to import into Ollama: {e}")
 

@@ -27,22 +27,9 @@ interface PlotViewProps {
   metadata?: Record<string, any>;
 }
 
-// Simple Moving Average for smoothing
-const smoothData = (data: PlotPoint[], window: number = 5) => {
-  return data.map((point, index) => {
-    const start = Math.max(0, index - window + 1);
-    const subset = data.slice(start, index + 1);
-    const sum = subset.reduce((acc, p) => acc + (p.loss || 0), 0);
-    return {
-      ...point,
-      loss_smoothed: sum / subset.length
-    };
-  });
-};
-
 export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata }) => {
-  const processedData = useMemo(() => smoothData(data), [data]);
   const [deployState, setDeployState] = React.useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
+  const [deployMessage, setDeployMessage] = React.useState('');
   const [now, setNow] = React.useState(Date.now());
   const hasTriggeredDeploy = React.useRef(false);
   
@@ -103,11 +90,12 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
 
   const handleAutoDeploy = async () => {
     setDeployState('deploying');
+    setDeployMessage('Initializing deployment...');
     try {
       const modelName = metadata?.model_name || "Vibe-Finetuned-Model";
-      const modelSlug = metadata?.model_slug || "qwen2-0-5b";
+      const modelSlug = metadata?.model_slug || "Vibe-Finetuned-Model-Slug";
 
-      const resp = await fetch("http://127.0.0.1:2000/register_model", {
+      const response = await fetch("http://127.0.0.1:2000/register_model", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -115,11 +103,38 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
           model_slug: modelSlug
         })
       });
-      if (!resp.ok) throw new Error("Deploy failed");
-      setDeployState('ready');
-    } catch (e) {
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Stream failure");
+
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.trim().startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.trim().slice(6));
+              if (data.status === 'error') throw new Error(data.message);
+              setDeployMessage(data.message);
+              if (data.status === 'success') {
+                setDeployState('ready');
+                return;
+              }
+            } catch (e: any) {
+              console.warn("Parse error in deploy stream", e);
+              if (e.message) throw e;
+            }
+          }
+        }
+      }
+    } catch (e: any) {
       console.error(e);
       setDeployState('error');
+      setDeployMessage(e.message || "Deployment failed");
     }
   };
 
@@ -136,12 +151,14 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
             </div>
             <div>
               <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${deployState === 'ready' ? 'text-purple-400' : 'text-emerald-500/60'}`}>
-                {deployState === 'deploying' ? 'Deploying to Arena...' : 
+                {deployState === 'deploying' ? deployMessage : 
                  deployState === 'ready' ? 'Model Ready in Arena' : 
                  'Training Complete'}
               </h4>
               <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">
-                {deployState === 'deploying' ? 'Registering Adapter with Ollama' : 'Efficiency & Hardware Throughput Summary'}
+                {deployState === 'deploying' ? 'Ollama Handover Progress' : 
+                 deployState === 'error' ? deployMessage :
+                 'Efficiency & Hardware Throughput Summary'}
               </p>
             </div>
           </div>
@@ -185,9 +202,9 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Training Loss - The Master Chart */}
-        <ChartContainer title="Training Loss" subtitle="Raw vs Smoothed (EMA)">
+        <ChartContainer title="Training Loss" subtitle="Raw Value History">
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <AreaChart data={processedData}>
+            <AreaChart data={data}>
               <defs>
                 <linearGradient id="colorLoss" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.1}/>
@@ -201,8 +218,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
                 contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
                 itemStyle={{ color: '#F59E0B' }}
               />
-              <Area type="monotone" dataKey="loss_smoothed" stroke="#F59E0B" strokeWidth={2} fillOpacity={1} fill="url(#colorLoss)" />
-              <Line type="monotone" dataKey="loss" stroke="#F59E0B" strokeWidth={1} strokeOpacity={0.2} dot={false} />
+              <Area type="monotone" dataKey="loss" stroke="#F59E0B" strokeWidth={2} fillOpacity={1} fill="url(#colorLoss)" />
             </AreaChart>
           </ResponsiveContainer>
         </ChartContainer>
