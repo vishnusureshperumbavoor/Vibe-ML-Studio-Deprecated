@@ -161,7 +161,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   // Filter list to only show Native (llama-cpp-python) models as requested
   const allModels = nativeModels;
-
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  
   const [messagesA, setMessagesA] = useState<Message[]>([]);
   const [messagesB, setMessagesB] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -324,6 +325,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
     setInput('');
     
+    // Snaps the cursor back to the prompt immediately
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+    
     const promises = [fetchStream(selectedModel, newHistoryA, setMessagesA, setIsSendingA, abortA)];
     if (isSplitMode && selectedModel2) {
       promises.push(fetchStream(selectedModel2, newHistoryB, setMessagesB, setIsSendingB, abortB));
@@ -440,9 +446,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
               }
             }}
             placeholder="Enter prompt"
+            ref={inputRef}
             className="w-full bg-[#140F1D]/80 backdrop-blur-xl border border-[#352554] rounded-3xl p-5 pr-16 text-[#E2D8F0] placeholder-[#9480B3] focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none shadow-2xl h-[72px]"
             rows={1}
-            disabled={isSending}
           />
           <button
             onClick={isSending ? handleStop : handleSend}
