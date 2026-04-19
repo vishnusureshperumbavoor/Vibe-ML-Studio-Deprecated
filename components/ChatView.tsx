@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2, Activity, Clock, Zap, Search, X, Database, FileText, Plus } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2, Activity, Clock, Zap, Search, X, Database, FileText, Plus, CheckCircle2, Copy } from 'lucide-react';
 import { Button } from './Button';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   reasoning?: string;
   stats?: {
@@ -176,7 +176,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // Filter list to only show Native (llama-cpp-python) models as requested
   const allModels = nativeModels;
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [reportCopied, setReportCopied] = useState(false);
   
+  const handleCopyLatestReport = () => {
+    if (messagesA.length < 2) return;
+    
+    // Find last assistant message and previous user message
+    const lastAssistantIdx = [...messagesA].reverse().findIndex(m => m.role === 'assistant');
+    if (lastAssistantIdx === -1) return;
+    
+    const actualIdx = messagesA.length - 1 - lastAssistantIdx;
+    const assistantMsg = messagesA[actualIdx];
+    const userMsg = actualIdx > 0 ? messagesA[actualIdx - 1] : { content: "Unknown" };
+
+    const report = `[VML Arena Diagnostic Report]
+Model: ${selectedModel}
+Knowledge Base: ${selectedCollection || 'None'}
+TTFT: ${assistantMsg.stats?.ttft || 0}ms
+Speed: ${assistantMsg.stats?.tps || 0} t/s
+
+--- USER QUERY ---
+${userMsg.content}
+
+--- AI RESPONSE ---
+${assistantMsg.content}`;
+
+    navigator.clipboard.writeText(report);
+    setReportCopied(true);
+    setTimeout(() => setReportCopied(false), 2000);
+  };
+
   const [allCollections, setAllCollections] = useState<any[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string>('');
   const [activeEvidence, setActiveEvidence] = useState<any[] | null>(null);
@@ -375,17 +404,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             name: "search_knowledge", 
-            arguments: { query: input, collection: selectedCollection, limit: 3 } 
+            arguments: { query: input, collection: selectedCollection, limit: 2 } 
           })
         });
         const data = await resp.json();
-        const text = data[0]?.text || "";
+        const text = data.result?.[0]?.text || data[0]?.text || "";
         if (text.includes("[JSON_RESULTS]")) {
           currentEvidence = JSON.parse(text.split("[JSON_RESULTS]")[1].trim());
           if (currentEvidence.length > 0) {
-            ragContext = "CONTEXT FROM KNOWLEDGE BASE:\n" + currentEvidence.map((r: any, i: number) => 
-               `[Source ${i+1}: ${r.metadata.source}, Page: ${r.metadata.page}]\n${r.content}`
-            ).join("\n\n") + "\n\nINSTRUCTION: Answer the user's question ONLY based on the context above. If not found, say you don't know.\n\n";
+            ragContext = "You are a Knowledge Assistant. Use the following context fragments to answer the user's question accurately.\n\n" + 
+               "--- CONTEXT ---\n" +
+               currentEvidence.map((r: any, i: number) => 
+               `[Fragment ${i+1}]\n${r.content}`
+            ).join("\n\n") + "\n\n--- CRITICAL INSTRUCTION ---\nAnswer the user's question ONLY using the context above. Be concise and professional. If the information is missing, state that you do not have enough information.";
           }
         }
       } catch (e) {
@@ -393,16 +424,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     }
 
-    const userMsg: Message = { role: 'user', content: input, ragEvidence: currentEvidence };
-    const systemEnrichedMsg: Message = { role: 'user', content: ragContext + input };
+    const userDisplayMsg: Message = { role: 'user', content: input, ragEvidence: currentEvidence };
     
-    const newHistoryA = [...messagesA, systemEnrichedMsg];
-    setMessagesA(prev => [...prev, userMsg]); // Show clean message to user
+    // Construct actual history for the model
+    const newModelHistoryA = [...messagesA];
+    if (ragContext) {
+      newModelHistoryA.push({ role: 'system', content: ragContext });
+    }
+    newModelHistoryA.push({ role: 'user', content: input });
     
-    let newHistoryB: Message[] = [];
+    setMessagesA(prev => [...prev, userDisplayMsg]); // Show clean message in UI
+    
+    let newModelHistoryB: Message[] = [];
     if (isSplitMode && selectedModel2) {
-      newHistoryB = [...messagesB, userMsg];
-      setMessagesB(newHistoryB);
+      newModelHistoryB = [...messagesB];
+      if (ragContext) {
+        newModelHistoryB.push({ role: 'system', content: ragContext });
+      }
+      newModelHistoryB.push({ role: 'user', content: input });
+      setMessagesB(prev => [...prev, userDisplayMsg]);
     }
 
     setInput('');
@@ -412,9 +452,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
       inputRef.current?.focus();
     }, 0);
     
-    const promises = [fetchStream(selectedModel, newHistoryA, setMessagesA, setIsSendingA, abortA)];
+    const promises = [fetchStream(selectedModel, newModelHistoryA, setMessagesA, setIsSendingA, abortA)];
     if (isSplitMode && selectedModel2) {
-      promises.push(fetchStream(selectedModel2, newHistoryB, setMessagesB, setIsSendingB, abortB));
+      promises.push(fetchStream(selectedModel2, newModelHistoryB, setMessagesB, setIsSendingB, abortB));
     }
     
     await Promise.all(promises);
@@ -502,6 +542,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleCopyLatestReport}
+            disabled={messagesA.length < 2}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+              reportCopied 
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' 
+                : 'text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 disabled:opacity-30'
+            }`}
+            title="Copy Diagnostic Report"
+          >
+            {reportCopied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+          </button>
+
           <Button 
             variant="ghost" 
             size="sm" 

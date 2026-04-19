@@ -42,11 +42,11 @@ class NativeInferenceManager:
             self.locks.clear()
             gc.collect()
 
-        # Initialize Llama.cpp engine
+        # Initialize Llama.cpp engine with expanded context for RAG
         model_instance = Llama(
             model_path=model_path,
             lora_path=lora_path,
-            n_ctx=2048,
+            n_ctx=4096,
             n_threads=os.cpu_count() or 4,
             n_gpu_layers=0,
             verbose=False
@@ -68,15 +68,15 @@ class NativeInferenceManager:
         if not model or not lock:
             raise RuntimeError("Model not pre-loaded.")
 
-        # Basic Chat Template
+        # Standard ChatML Template
         prompt = ""
         for msg in messages:
             role = msg['role']
             content = msg['content']
-            if role == 'user':
-                prompt += f"<|im_start|>user\n{content}<|im_end|>\n<|im_start|>assistant\n"
-            elif role == 'assistant':
-                prompt += f"{content}<|im_end|>\n"
+            prompt += f"<|im_start|>{role}\n{content}<|im_end|>\n"
+        
+        # Tail the prompt to force the assistant to start generating
+        prompt += "<|im_start|>assistant\n"
 
         # Performance Tracking
         t_start = time.perf_counter()

@@ -20,6 +20,14 @@ export const KnowledgeLibrary: React.FC = () => {
   const [collectionData, setCollectionData] = useState<any[]>([]);
   const [isExploring, setIsExploring] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | number | null>(null);
+
+  const handleCopyBlock = (text: string, id: string | number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const [isMining, setIsMining] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [miningStep, setMiningStep] = useState<number>(0);
@@ -469,11 +477,22 @@ export const KnowledgeLibrary: React.FC = () => {
             {/* Collection Details / Explorer Placeholder */}
             {selectedCollection && (
               <section className="p-8 rounded-3xl border border-purple-500/10 bg-[#140F1D]/30 space-y-6 animate-in fade-in duration-500">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pb-4 border-b border-purple-500/10 mb-2">
                   <div className="flex items-center gap-3">
                     <Database className="text-purple-400" size={20} />
                     <h3 className="font-bold text-[#E2D8F0]">Active Collection: {selectedCollection}</h3>
                   </div>
+                  
+                  {collectionData.length > 0 && !isExploring && (
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => handleCopyBlock(collectionData.map(b => b.content).join('\n\n'), 'all')}
+                      className="text-xs text-purple-400 hover:bg-purple-500/10 flex items-center gap-2"
+                    >
+                      {copiedId === 'all' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                      {copiedId === 'all' ? 'Copied All!' : 'Copy Collection'}
+                    </Button>
+                  )}
                 </div>
                 
                 {isExploring ? (
@@ -488,16 +507,25 @@ export const KnowledgeLibrary: React.FC = () => {
                 ) : (
                   <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                     {collectionData.map((block, i) => (
-                      <div key={block.id || i} className="p-5 rounded-2xl bg-[#0B090F] border border-purple-500/10 hover:border-purple-500/30 transition-all group">
+                      <div key={block.id || i} className="p-5 rounded-2xl bg-[#0B090F] border border-purple-500/10 hover:border-purple-500/30 transition-all group relative">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs font-mono font-bold text-purple-400/80 uppercase tracking-widest">
                             Block {i + 1}
                           </span>
-                          {block.metadata?.source && (
-                            <span className="text-[10px] text-gray-500 truncate max-w-[250px]" title={block.metadata.source}>
-                              {block.metadata.source}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {block.metadata?.source && (
+                              <span className="text-[10px] text-gray-500 truncate max-w-[200px]" title={block.metadata.source}>
+                                {block.metadata.source}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => handleCopyBlock(block.content, block.id || i)}
+                              className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 transition-colors"
+                              title="Copy Block Content"
+                            >
+                              {copiedId === (block.id || i) ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                            </button>
+                          </div>
                         </div>
                         <p className="text-sm text-gray-300 leading-relaxed font-serif">
                           {block.content}
