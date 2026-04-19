@@ -1,6 +1,7 @@
 import os
 import gc
 import threading
+import time
 from typing import List, Dict
 try:
     from llama_cpp import Llama
@@ -37,16 +38,10 @@ class NativeInferenceManager:
 
         # Manage cache limit (Evict oldest if needed)
         if len(self.models_cache) >= self.cache_limit:
-            # Simple eviction: clear everything to be safe on RAM
-            print("--- Memory Limit Reached: Clearing Native Model Cache ---")
             self.models_cache.clear()
             self.locks.clear()
             gc.collect()
 
-        print(f"--- Loading Native Model: {model_filename} ---")
-        if lora_path:
-            print(f"--- Applying LoRA: {lora_path} ---")
-        
         # Initialize Llama.cpp engine
         model_instance = Llama(
             model_path=model_path,
@@ -62,7 +57,6 @@ class NativeInferenceManager:
         return model_instance
 
     def chat_stream(self, model_filename: str, lora_path: str, messages: List[Dict]):
-        print(f"--- Chat Stream Started: {model_filename} ---")
         model_path = os.path.join(self.models_dir, model_filename)
         if lora_path and os.path.isdir(lora_path):
             lora_path = os.path.join(lora_path, "adapter.gguf")
@@ -84,6 +78,12 @@ class NativeInferenceManager:
             elif role == 'assistant':
                 prompt += f"{content}<|im_end|>\n"
 
+        # Performance Tracking
+        t_start = time.perf_counter()
+        ttft = None
+        t_first_token = None
+        token_count = 0
+
         # Lock this specific model for thread-safe inference
         with lock:
             stream = model(
@@ -96,7 +96,23 @@ class NativeInferenceManager:
             for chunk in stream:
                 text = chunk['choices'][0]['text']
                 if text:
-                    yield text
+                    token_count += 1
+                    t_now = time.perf_counter()
+                    
+                    if ttft is None:
+                        ttft = (t_now - t_start) * 1000 # ms
+                        t_first_token = t_now
+                    
+                    # Calculate TPS since first token
+                    tps = 0
+                    if t_first_token and t_now > t_first_token:
+                        tps = token_count / (t_now - t_first_token)
+                    
+                    yield {
+                        "content": text,
+                        "ttft": round(ttft, 2) if ttft else 0,
+                        "tps": round(tps, 2)
+                    }
 
 # Singleton instance
 base_dir = os.path.dirname(os.path.abspath(__file__))

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2 } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2, Activity, Clock, Zap } from 'lucide-react';
 import { Button } from './Button';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   reasoning?: string;
+  stats?: {
+    ttft: number;
+    tps: number;
+  };
 }
 
 interface VMLModel {
@@ -108,6 +112,19 @@ const renderMessageList = (messages: Message[], isSending: boolean, scrollRef: a
                           <span className="inline-block w-1.5 h-4 ml-1 bg-purple-500/50 animate-pulse rounded-full align-middle" />
                         )}
                       </div>
+
+                      {isAssistant && msg.stats && (
+                        <div className="mt-4 pt-3 border-t border-purple-500/10 flex items-center gap-4 text-[10px] font-medium tracking-wider uppercase">
+                          <div className="flex items-center gap-1.5 text-purple-400/70">
+                            <Clock size={10} />
+                            <span>TTFT: <span className="text-purple-300">{msg.stats.ttft}ms</span></span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-indigo-400/70">
+                            <Activity size={10} />
+                            <span>Speed: <span className="text-indigo-300">{msg.stats.tps} t/s</span></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -261,15 +278,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
               
               const newContent = json.content || '';
               const newReasoning = '';
+              const ttft = json.ttft;
+              const tps = json.tps;
               
-              if (newContent || newReasoning) {
+              if (newContent || newReasoning || ttft || tps) {
                 setMsg(prev => {
                   const newMessages = [...prev];
                   const lastMsg = newMessages[newMessages.length - 1];
                   newMessages[newMessages.length - 1] = { 
                     ...lastMsg,
                     content: lastMsg.content + newContent,
-                    reasoning: (lastMsg.reasoning || '') + newReasoning
+                    reasoning: (lastMsg.reasoning || '') + newReasoning,
+                    stats: ttft ? { ttft, tps } : lastMsg.stats
                   };
                   return newMessages;
                 });

@@ -223,7 +223,6 @@ async def get_image(filename: str):
 
 @app.post("/v1/native/chat")
 async def native_chat(req: NativeChatRequest):
-    print(f"--- Incoming Native Chat Request for model: {req.model_filename} ---")
     """
     Streaming endpoint for native llama.cpp inference.
     Supports base GGUF + optional LoRA adapters.
@@ -242,8 +241,14 @@ async def native_chat(req: NativeChatRequest):
             native_manager.load_model(req.model_filename, lora_path)
             
             # 3. Stream tokens (Thread-safe)
-            for token in native_manager.chat_stream(req.model_filename, lora_path, req.messages):
-                yield f"data: {json.dumps({'content': token})}\n\n"
+            for chunk in native_manager.chat_stream(req.model_filename, lora_path, req.messages):
+                # chunk is now {"content": "...", "ttft": ..., "tps": ...}
+                payload = {
+                    "content": chunk["content"],
+                    "ttft": chunk["ttft"],
+                    "tps": chunk["tps"]
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
             
             yield f"data: {json.dumps({'done': True})}\n\n"
         except Exception as e:
