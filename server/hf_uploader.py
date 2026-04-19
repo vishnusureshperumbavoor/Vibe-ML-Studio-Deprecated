@@ -9,7 +9,14 @@ def upload_to_hf(file_path: str, model_name: str):
     Naming convention: {model-name}-gguf-vml
     Visibility: Public
     """
-    load_dotenv()
+    # Load from current dir or project root
+    if os.path.exists(".env"):
+        load_dotenv(".env")
+    elif os.path.exists("../.env"):
+        load_dotenv("../.env")
+    else:
+        load_dotenv() # Fallback
+    
     token = os.getenv("HF_TOKEN")
     
     if not token:
@@ -22,9 +29,9 @@ def upload_to_hf(file_path: str, model_name: str):
     try:
         user_info = api.whoami()
         username = user_info['name']
-        print(f"👤 Authenticated as: {username}")
+        print(f"Authenticated as: {username}")
     except Exception as e:
-        print(f"❌ Authentication failed: {e}")
+        print(f"Authentication failed: {e}")
         return False
 
     # 2. Prepare Repo Details
@@ -33,13 +40,13 @@ def upload_to_hf(file_path: str, model_name: str):
     # 3. Create Repo if not exists
     try:
         create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True, repo_type="model")
-        print(f"✅ Repository ready: https://huggingface.co/{repo_id}")
+        print(f"Repository ready: https://huggingface.co/{repo_id}")
     except Exception as e:
-        print(f"⚠️ Repo creation/check failed: {e}")
+        print(f"Repo creation/check failed: {e}")
 
     # 4. Upload File
     filename = os.path.basename(file_path)
-    print(f"📤 Uploading {filename} to HF...")
+    print(f"Uploading {filename} to HF...")
     
     try:
         future = api.upload_file(
@@ -49,10 +56,10 @@ def upload_to_hf(file_path: str, model_name: str):
             repo_type="model",
             commit_message=f"Upload quantized model: {filename}"
         )
-        print(f"🚀 Success! Model available at: https://huggingface.co/{repo_id}/blob/main/{filename}")
+        print(f"Success! Model available at: https://huggingface.co/{repo_id}/blob/main/{filename}")
         return True
     except Exception as e:
-        print(f"❌ Upload failed: {e}")
+        print(f"Upload failed: {e}")
         return False
 
 if __name__ == "__main__":
