@@ -48,7 +48,6 @@ dist-ssr
 .env.*.local
 
 # Vibe Data & Venv
-server/data/
 server/models/
 server/venv/
 *.nii.gz

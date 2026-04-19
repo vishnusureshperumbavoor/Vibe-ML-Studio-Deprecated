@@ -21,11 +21,12 @@ app = FastAPI(title="Vibe Training Execution Engine")
 # Base directory for skills and file access (Project Root)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Directory of main.py (server/)
 PROJECT_ROOT = os.path.dirname(BASE_DIR)              # One level up (Vibe-ML-platform/)
-DATA_DIR = os.path.join(BASE_DIR, "data")             # server/data/
+MODELS_DIR = os.path.join(BASE_DIR, "models")         # server/models/
 
-# Ensure the data directory exists for generated images
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+# Ensure necessary directories exist
+for d in [MODELS_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 # Allow the React frontend to communicate with this backend
 app.add_middleware(
@@ -214,7 +215,7 @@ async def get_image(filename: str):
     Serves a generated image file from the server/data directory.
     Usage: [IMAGE: slice.png] in stdout will be picked up by React.
     """
-    file_path = os.path.join(DATA_DIR, filename)
+    file_path = os.path.join(MODELS_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Image not found")
     from fastapi.responses import FileResponse
@@ -233,7 +234,7 @@ async def native_chat(req: NativeChatRequest):
             lora_path = None
             if req.lora_slug:
                 # Adapters are stored in server/data/<slug>
-                abs_lora_dir = os.path.join(DATA_DIR, req.lora_slug)
+                abs_lora_dir = os.path.join(MODELS_DIR, req.lora_slug)
                 if os.path.exists(abs_lora_dir):
                     lora_path = abs_lora_dir
             
@@ -273,9 +274,9 @@ async def list_native_models():
                 results.append({"name": f, "source": "native", "type": "base"})
     
     # 2. Fine-tuned Adapters (Folders in /data with safetensors)
-    if os.path.exists(DATA_DIR):
-        for slug in os.listdir(DATA_DIR):
-            lora_dir = os.path.join(DATA_DIR, slug)
+    if os.path.exists(MODELS_DIR):
+        for slug in os.listdir(MODELS_DIR):
+            lora_dir = os.path.join(MODELS_DIR, slug)
             if os.path.isdir(lora_dir):
                 # Check for adapter weights
                 if os.path.exists(os.path.join(lora_dir, "adapter_model.safetensors")):
