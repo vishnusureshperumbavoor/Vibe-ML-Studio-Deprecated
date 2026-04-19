@@ -1,17 +1,17 @@
 import asyncio
+import os
+import json
+import platform
+import psutil
+from dotenv import load_dotenv
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
-from huggingface_hub import HfApi
-import os
-import psutil
-import torch
-from dotenv import load_dotenv
+from huggingface_hub import HfApi, hf_hub_download
 
 # Load token
 load_dotenv()
-hf_api = HfApi()
 
 # Create the MCP Server instance
 server = Server("vml-huggingface")
@@ -97,12 +97,13 @@ async def handle_call_tool(
 ) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
     """Handle tool execution requests via MCP."""
     hf_token = os.getenv("HF_TOKEN")
-    import json
+    from huggingface_hub import HfApi
+    api = HfApi()
     
     if name == "model_search":
         query = arguments.get("query")
         limit = arguments.get("limit", 5)
-        models = hf_api.list_models(search=query, limit=limit, token=hf_token, sort="downloads")
+        models = api.list_models(search=query, limit=limit, token=hf_token, sort="downloads")
         
         results = []
         for m in models:
@@ -120,7 +121,7 @@ async def handle_call_tool(
     elif name == "dataset_search":
         query = arguments.get("query")
         limit = arguments.get("limit", 5)
-        datasets = hf_api.list_datasets(search=query, limit=limit, token=hf_token, sort="downloads", direction=-1)
+        datasets = api.list_datasets(search=query, limit=limit, token=hf_token, sort="downloads", direction=-1)
         
         results = []
         for d in datasets:
@@ -140,20 +141,12 @@ async def handle_call_tool(
         epochs = arguments.get("epochs", 3)
         rank = arguments.get("rank", 16)
         
-        # Derive a descriptive name: parent-model-dataset-instruct-vml1
         model_name_part = base_model.split('/')[-1].lower().replace('.', '-')
         dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
         model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
-        output_dir = f"./data/{model_slug}"
         
-        # Sanitize base model for Ollama mapping
-        ollama_base = base_model
-        if "Qwen2-0.5B" in base_model:
-            ollama_base = "qwen2:0.5b"
-        elif "Llama-3" in base_model:
-            ollama_base = "llama3"
-        elif "SmolLM" in base_model:
-            ollama_base = "smollm"
+        # Unified path: Save directly into the server/models folder for Chat Engine discovery
+        output_dir = os.path.join(os.getcwd(), "server", "models", model_slug)
         
         # Split into logical blocks for the notebook
         blocks = [
@@ -255,26 +248,47 @@ trainer = SFTTrainer(
 print("Starting training loop...")
 trainer.train()
 """,
-            f"""# Block 5: Export and Integration
-print(f"Saving LoRA adapters to {output_dir}...")
-trainer.save_model("{output_dir}")
+            f"""# Block 5: Export and Weights Persistence
+print(f"Saving fine-tuned adapters to {output_dir}...")
+trainer.save_model(r"{output_dir}")
+print("✅ Local weights stored successfully.")
+""",
+            f"""# Block 5.5: LoRA-to-GGUF Conversion (for Arena Chat)
+import sys
+import os
+import subprocess
 
-print("Packaging for Ollama...")
-# Ollama LoRA support: FROM the base model, ADAPTER for the fine-tuned folder
-modelfile_content = f"FROM {ollama_base}\\nADAPTER adapter_model.safetensors\\n"
-modelfile_path = f"{output_dir}/Modelfile"
+tools_cache = os.path.join(os.getcwd(), "server", ".cache", "vml-tools")
+lora_converter = os.path.join(tools_cache, "convert_lora_to_gguf.py")
+adapter_gguf = os.path.join(r"{output_dir}", "adapter.gguf")
 
-with open(modelfile_path, "w") as f:
-    f.write(modelfile_content)
+print("🔄 Converting LoRA adapters to GGUF format for VML Arena...")
+try:
+    # We call the llama.cpp lora converter on the adapter directory
+    subprocess.run([
+        sys.executable, lora_converter, 
+        r"{output_dir}", 
+        "--outfile", adapter_gguf
+    ], check=True)
+    print(f"✅ LoRA GGUF ready at: {{adapter_gguf}}")
+except Exception as e:
+    print(f"❌ LoRA conversion failed: {{e}}")
+""",
+            f"""# Block 6: Cloud Deployment (HF Auto-Upload)
+print("🚀 Initiating Autonomous HF Uploader...")
+import sys
+sys.path.append(os.path.join(os.getcwd(), "server"))
 
 try:
-    # Crucial: Run from within the data folder so ADAPTER paths work correctly
-    subprocess.run(["ollama", "create", "{model_slug}", "-f", "Modelfile"], cwd="{output_dir}", check=True)
-    print(f"Model successfully imported into Ollama as '{model_slug}'!")
+    from hf_uploader import upload_to_hf
+    upload_to_hf("{output_dir}", "{model_slug}")
+    print("✅ Fine-tuned model successfully synced to Hugging Face!")
+except ImportError:
+    print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
 except Exception as e:
-    print(f"Failed to import into Ollama: {{e}}")
+    print(f"⚠️ Deployment failed: {{e}}")
 
-print("SFT Pipeline Complete.")
+print("🏁 VML SFT Pipeline Complete and Synced.")
 """
         ]
         
@@ -284,47 +298,108 @@ print("SFT Pipeline Complete.")
     elif name == "start_quantization_job":
         model_id = arguments.get("model_id")
         bits = arguments.get("bits", "4")
+        model_name_clean = model_id.split('/')[-1]
+        target_filename = f"{model_name_clean.lower()}-q{bits}_0.gguf"
         
-        script = f'''# Model Quantization Script - VML Studio
+        blocks = [
+            f"""# Block 1: Environment & Configuration
 import os
+import sys
 import subprocess
 
 model_id = "{model_id}"
 bits = "{bits}"
-print(f"🛠️ Starting Quantization: {{model_id}} to {{bits}}-bit GGUF")
+target_filename = "{target_filename}"
+models_dir = os.path.join(os.getcwd(), "server", "models")
+base_models_dir = os.path.join(models_dir, "base_models")
+os.makedirs(models_dir, exist_ok=True)
+os.makedirs(base_models_dir, exist_ok=True)
 
-# 1. Download Model
-print("📥 Downloading model weights...")
+print(f"🛠️ Starting VML Quantization Pipeline: {{model_id}} -> {{bits}}-bit GGUF")
+""",
+            f"""# Block 2: Base Model Acquisition (with Progress Tracking)
 from huggingface_hub import snapshot_download
-model_path = snapshot_download(repo_id=model_id, local_dir=f"./{{model_id.replace('/', '_')}}")
+import json
 
-# 2. Convert to GGUF (Placeholder for llama.cpp integration)
-# In a real studio, we would use a pre-built llama.cpp or a python-based quantization library.
-# For this demo, we will create a Modelfile that Ollama can use to perform internal quantization if supported,
-# or assume the user has llama.cpp tools installed.
+class VMLProgress:
+    def __init__(self, *args, **kwargs):
+        self.total = kwargs.get('total', 100)
+        self.n = 0
+    def update(self, n):
+        self.n += n
+        pct = min(100, int((self.n / self.total) * 100))
+        print(f"[VML_DATA] {{\"type\": \"progress\", \"percentage\": {{pct}}}}")
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
 
-print("📦 Creating Ollama Modelfile...")
-modelfile_content = f"FROM {{model_path}}\\n"
-# Add template if possible
-with open("Modelfile", "w") as f:
-    f.write(modelfile_content)
+print(f"📥 Fetching {{model_id}} weights...")
 
-print(f"🚀 Importing into Ollama as 'vml-quantized-{{bits}}bit'...")
+source_path = snapshot_download(
+    repo_id=model_id, 
+    local_dir=os.path.join(base_models_dir, model_id.replace('/', '_')),
+    ignore_patterns=["*.msgpack", "*.h5", "*.ot", "*.onnx", "framework_specific*"],
+    tqdm_class=VMLProgress
+)
+print(f"✅ Model weights ready at: {{source_path}}")
+""",
+            f"""# Block 3: Quantization & LoRA Tooling Setup
+print("📦 Checking conversion tools...")
+tools_cache = os.path.join(os.getcwd(), "server", ".cache", "vml-tools")
+os.makedirs(tools_cache, exist_ok=True)
+converter_script = os.path.join(tools_cache, "convert_hf_to_gguf.py")
+lora_converter_script = os.path.join(tools_cache, "convert_lora_to_gguf.py")
+
+import urllib.request
+def fetch_tool(name, url, path):
+    if not os.path.exists(path):
+        print(f"📥 Fetching {{name}}...")
+        urllib.request.urlretrieve(url, path)
+        print(f"✅ {{name}} prepared.")
+    else:
+        print(f"✅ {{name}} already present.")
+
+fetch_tool("HF-to-GGUF Converter", "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_hf_to_gguf.py", converter_script)
+fetch_tool("LoRA-to-GGUF Converter", "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_lora_to_gguf.py", lora_converter_script)
+""",
+            f"""# Block 4: GGUF Model Conversion
+output_path = os.path.join(models_dir, target_filename)
+print(f"🔄 Converting weights to {{bits}}-bit GGUF...")
+
 try:
-    subprocess.run(["ollama", "create", f"vml-quantized-{{bits}}bit", "-f", "Modelfile"], check=True)
-    print("✅ Model successfully quantized and imported into Ollama!")
+    subprocess.run([
+        sys.executable, converter_script, 
+        source_path, 
+        "--outtype", f"q{{bits}}_0", 
+        "--outfile", output_path
+    ], check=True)
+    print(f"✅ Quantization successfully completed: {{output_path}}")
 except Exception as e:
-    print(f"⚠️ Failed to import into Ollama: {{e}}")
-'''
-        return [types.TextContent(type="text", text=script)]
+    print(f"❌ Quantization failed: {{e}}")
+    sys.exit(1)
+""",
+            f"""# Block 5: Cloud Deployment
+print("🚀 Initiating Autonomous HF Uploader...")
+import sys
+sys.path.append(os.path.join(os.getcwd(), "server"))
+try:
+    from hf_uploader import upload_to_hf
+    upload_to_hf(output_path, model_id)
+except ImportError:
+    print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
+except Exception as e:
+    print(f"⚠️ Deployment failed: {{e}}")
+
+print("🏁 VML Quantization Pipeline Complete.")
+"""
+        ]
+        
+        blocks_json = json.dumps(blocks)
+        return [types.TextContent(type="text", text=f"[VML_BLOCKS]\n{blocks_json}")]
 
     elif name == "fetch_gguf":
         repo_id = arguments.get("repo_id")
         filename = arguments.get("filename")
-        
-        from huggingface_hub import hf_hub_download
-        
-        # models directory relative to mcp_server_hf.py
         base_dir = os.path.dirname(os.path.abspath(__file__))
         models_dir = os.path.join(base_dir, "models")
         if not os.path.exists(models_dir):
@@ -342,19 +417,11 @@ except Exception as e:
             return [types.TextContent(type="text", text=f"❌ Download failed: {str(e)}")]
 
     elif name == "get_system_specs":
-        import platform
-        import json
-        
-        # CPU & RAM - Guaranteed Fast
         cpu_count = psutil.cpu_count(logical=True)
         ram_total = round(psutil.virtual_memory().total / (1024**3), 2)
-        
         gpu_info = {"available": False, "name": "N/A", "vram_gb": 0}
         
-        # GPU - Safe Check (Avoid full torch init hang)
         try:
-            # We only check torch if we have some evidence of NVIDIA hardware
-            # This avoids the driver hang on CPU-only systems
             has_gpu_env = os.system("nvidia-smi > nul 2>&1") == 0
             if has_gpu_env:
                 import torch
@@ -365,7 +432,7 @@ except Exception as e:
                         "vram_gb": round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 2)
                     }
         except:
-            pass # Fallback to CPU-only info if torch/nvidia-smi fails or hangs
+            pass
         
         specs = {
             "os": platform.system(),

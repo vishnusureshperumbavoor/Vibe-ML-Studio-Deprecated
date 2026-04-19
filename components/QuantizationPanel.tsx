@@ -11,6 +11,12 @@ export const QuantizationPanel: React.FC<QuantizationPanelProps> = ({ onStart, i
   const [modelId, setModelId] = useState('');
   const [bits, setBits] = useState('4');
 
+  const modelSuggestions = [
+    { id: 'Qwen/Qwen2.5-1.5B', downloads: 850000, likes: 1200, is_cpu_ready: true },
+    { id: 'Qwen/Qwen2.5-0.5B', downloads: 450000, likes: 800, is_cpu_ready: true },
+    { id: 'meta-llama/Llama-3.2-3B', downloads: 1200000, likes: 2500, is_cpu_ready: true },
+  ];
+
   const bitOptions = [
     { label: '4-bit (Fastest)', value: '4', desc: 'Best for 8GB-16GB RAM. Minimal loss.' },
     { label: '8-bit (Balanced)', value: '8', desc: 'Better quality, requires 16GB-32GB RAM.' },
@@ -25,6 +31,7 @@ export const QuantizationPanel: React.FC<QuantizationPanelProps> = ({ onStart, i
           type="model" 
           placeholder="Search Hugging Face models (e.g., Qwen2)..." 
           onSelect={setModelId} 
+          suggestions={modelSuggestions}
         />
       </div>
 
@@ -62,7 +69,7 @@ export const QuantizationPanel: React.FC<QuantizationPanelProps> = ({ onStart, i
           <Info size={14} className="text-blue-400" />
         </div>
         <p className="text-[10px] text-blue-400/80 leading-relaxed">
-          Quantization compresses models to run on consumer hardware. We use GGUF format for optimal local performance via Ollama.
+          Quantization compresses models to run on consumer hardware. We use GGUF format for optimal local performance.
         </p>
       </div>
 

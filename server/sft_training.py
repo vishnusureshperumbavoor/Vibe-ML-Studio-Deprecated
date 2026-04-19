@@ -27,7 +27,7 @@ hardware = "GPU"
 model_name_part = model_id.split('/')[-1].lower().replace('.', '-')
 dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
 model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
-output_dir = f"./data/{model_slug}"
+output_dir = f"./models/{model_slug}"
 
 device = "cuda" if torch.cuda.is_available() and hardware == "GPU" else "cpu"
 

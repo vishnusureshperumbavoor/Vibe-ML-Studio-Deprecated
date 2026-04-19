@@ -351,25 +351,65 @@ export default function App() {
         })
       });
       const data = await resp.json();
-      const script = data.result?.[0]?.text || "";
+      const rawText = data.result?.[0]?.text || data[0]?.text || "";
       
-      const cellId = uuidv4();
-      const newCell: CellData = { id: cellId, type: 'code', content: script, status: 'running' };
-      setCells(prev => [...prev, newCell]);
-      setActiveView('studio');
-      
-      const result = await executeCode(
-        script, 
-        (partial) => {
-          setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
-        },
-        (plotPoint) => {
-          setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
+      if (!rawText) {
+        const errorMsg = data.error || data.message || "Unknown Error";
+        const details = JSON.stringify(data, null, 2);
+        setCells(prev => [...prev, { 
+          id: uuidv4(), 
+          type: 'markdown', 
+          content: `### ❌ Quantization Tool Error\n**Response**: ${errorMsg}\n\n**Details**:\n\`\`\`json\n${details}\n\`\`\``, 
+          status: 'error' 
+        }]);
+        return;
+      }
+
+      let blocks = [rawText];
+      if (rawText.startsWith("[VML_BLOCKS]")) {
+        try {
+          const jsonStr = rawText.replace("[VML_BLOCKS]", "").trim();
+          blocks = JSON.parse(jsonStr);
+        } catch (e) {
+          console.error("Failed to parse quantization blocks:", e);
         }
-      );
-      setCells(prev => prev.map(c => c.id === cellId ? { ...c, status: result.error ? 'error' : 'success', output: result.error || result.text } : c));
+      }
+      
+      setActiveView('studio');
+
+      // Add and Execute Cells Sequentially
+      for (const blockScript of blocks) {
+        const cellId = uuidv4();
+        const newCell: CellData = { 
+          id: cellId, 
+          type: 'code', 
+          content: blockScript, 
+          status: 'running' 
+        };
+        
+        setCells(prev => [...prev, newCell]);
+        
+        const result = await executeCode(
+          blockScript, 
+          (partial) => {
+            setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+          },
+          (plotPoint) => {
+            setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
+          }
+        );
+        
+        setCells(prev => prev.map(c => c.id === cellId ? { 
+          ...c, 
+          status: result.error ? 'error' : 'success', 
+          output: result.error || result.text 
+        } : c));
+
+        if (result.error) break; // Stop the sequence if a block fails
+      }
+      
     } catch (e) {
-      console.error("Quantization Failed:", e);
+      console.error("Quantization Workflow Failed:", e);
     } finally {
       setIsWorkflowExecuting(false);
     }
