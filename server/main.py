@@ -47,9 +47,7 @@ class FileWriteRequest(BaseModel):
     filename: str
     content: str
 
-class RegisterRequest(BaseModel):
-    model_name: str
-    model_slug: str
+
 
 class NativeChatRequest(BaseModel):
     model_filename: str
@@ -210,27 +208,6 @@ async def save_skill(req: FileWriteRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/ollama_status")
-async def ollama_status():
-    """
-    Checks if the local Ollama service is running by polling the /api/tags endpoint.
-    Ensures IPv4 is used explicitly to avoid Windows IPv6 localhost issues.
-    """
-    try:
-        import requests
-        # Poll the Ollama API with a slightly longer timeout
-        response = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
-        if response.status_code == 200:
-            data = response.json()
-            return {
-                "status": "online", 
-                "models": data.get("models", []),
-                "version": response.headers.get("x-ollama-version", "unknown")
-            }
-        return {"status": "warning", "message": f"Ollama Error: {response.status_code}"}
-    except Exception as e:
-        return {"status": "offline", "message": "Ollama service unreachable on 11434"}
-
 @app.get("/images/{filename}")
 async def get_image(filename: str):
     """
@@ -240,91 +217,8 @@ async def get_image(filename: str):
     file_path = os.path.join(DATA_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Image not found")
+    from fastapi.responses import FileResponse
     return FileResponse(file_path)
-
-
-@app.post("/register_model")
-async def register_model(req: RegisterRequest):
-    """
-    Registers a fine-tuned model (LoRA adapter) with Ollama using a streaming response
-    to provide real-time status updates (checking, pulling, creating).
-    """
-    async def status_stream():
-        try:
-            # 1. Resolve path
-            abs_target_dir = os.path.join(DATA_DIR, req.model_slug)
-            modelfile_path = os.path.join(abs_target_dir, "Modelfile")
-            
-            yield f"data: {json.dumps({'status': 'checking', 'message': 'Verifying Modelfile...'})}\n\n"
-            
-            if not os.path.exists(modelfile_path):
-                yield f"data: {json.dumps({'status': 'error', 'message': f'Modelfile not found in {req.model_slug}'})}\n\n"
-                return
-
-            # 2. Pre-process Modelfile (Automatic Agentic Correction)
-            with open(modelfile_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            
-            updated = False
-            for i, line in enumerate(lines):
-                # Map HF IDs to local Ollama tags
-                if "FROM Qwen/Qwen2-0.5B" in line:
-                    lines[i] = "FROM qwen2:0.5b\n"
-                    updated = True
-                elif "FROM meta-llama/Meta-Llama-3" in line:
-                    lines[i] = "FROM llama3\n"
-                    updated = True
-                elif "FROM HuggingFaceTB/SmolLM" in line:
-                    lines[i] = "FROM smollm\n"
-                    updated = True
-                
-                # Fix ambiguous adapter paths for Windows
-                if "ADAPTER ." in line:
-                    lines[i] = "ADAPTER adapter_model.safetensors\n"
-                    updated = True
-            
-            if updated:
-                with open(modelfile_path, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-
-            # 3. Ensure Base Model exists (Agentic Pull)
-            base_model_tag = "qwen2:0.5b"
-            
-            check_cmd = ["ollama", "list"]
-            list_proc = await asyncio.create_subprocess_exec(*check_cmd, stdout=asyncio.subprocess.PIPE)
-            stdout_list, _ = await list_proc.communicate()
-            
-            if base_model_tag not in stdout_list.decode():
-                 yield f"data: {json.dumps({'status': 'pulling', 'message': f'Pulling base model ({base_model_tag})... This may take a minute.'})}\n\n"
-                 pull_cmd = ["ollama", "pull", base_model_tag]
-                 # We wait for pull to complete
-                 pull_process = await asyncio.create_subprocess_exec(*pull_cmd)
-                 await pull_process.wait()
-
-            # 4. Execute 'ollama create'
-            yield f"data: {json.dumps({'status': 'creating', 'message': f'Registering {req.model_name} with Ollama...'})}\n\n"
-            
-            cmd = ["ollama", "create", req.model_name, "-f", "Modelfile"]
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                cwd=abs_target_dir,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            stdout, stderr = await process.communicate()
-            
-            if process.returncode != 0:
-                error_msg = stderr.decode().strip()
-                yield f"data: {json.dumps({'status': 'error', 'message': f'Ollama Error: {error_msg}'})}\n\n"
-                return
-
-            yield f"data: {json.dumps({'status': 'success', 'message': f'Model {req.model_name} is ready for Arena!'})}\n\n"
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(status_stream(), media_type="text/event-stream")
 
 
 @app.post("/v1/native/chat")

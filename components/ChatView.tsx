@@ -20,8 +20,6 @@ interface VMLModel {
 }
 
 interface ChatViewProps {
-  ollamaModels: VMLModel[];
-  isOllamaOnline: boolean;
   selectedModel: string;
   onModelChange: (model: string) => void;
 }
@@ -137,8 +135,6 @@ const renderMessageList = (messages: Message[], isSending: boolean, scrollRef: a
 };
 
 export const ChatView: React.FC<ChatViewProps> = ({ 
-  ollamaModels, 
-  isOllamaOnline,
   selectedModel,
   onModelChange
 }) => {
@@ -222,20 +218,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setSending(true);
 
     const modelObj = allModels.find(m => m.name === modelName);
-    const isNative = modelObj?.source === 'native';
     
-    // Choose endpoint based on source
-    const url = isNative ? 'http://127.0.0.1:2000/v1/native/chat' : 'http://127.0.0.1:11434/api/chat';
+    // Always use native inference Engine
+    const url = 'http://127.0.0.1:2000/v1/native/chat';
     
     // Build payload
-    const body = isNative ? {
-      model_filename: modelObj.type === 'base' ? modelObj.name : 'qwen2-0_5b-q8_0.gguf',
+    const body = {
+      model_filename: modelObj?.type === 'base' ? modelObj.name : 'qwen2-0_5b-instruct-q8_0.gguf',
       messages: history,
-      lora_slug: modelObj.lora_slug
-    } : {
-      model: modelName,
-      messages: history,
-      stream: true,
+      lora_slug: modelObj?.lora_slug
     };
 
     try {
@@ -268,8 +259,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
               const cleanLine = line.startsWith('data: ') ? line.slice(6) : line;
               const json = JSON.parse(cleanLine);
               
-              const newContent = isNative ? (json.content || '') : (json.message?.content || '');
-              const newReasoning = isNative ? '' : (json.message?.reasoning_content || '');
+              const newContent = json.content || '';
+              const newReasoning = '';
               
               if (newContent || newReasoning) {
                 setMsg(prev => {
@@ -290,7 +281,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        setMsg(prev => [...prev, { role: 'assistant', content: `Error: Failed to reach ${isNative ? 'Native' : 'Ollama'} Engine.` }]);
+        setMsg(prev => [...prev, { role: 'assistant', content: `Error: Failed to reach Native Engine.` }]);
       }
     } finally {
       setSending(false);
@@ -359,9 +350,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
           <div>
             <h2 className="text-sm font-semibold text-[#E2D8F0]">VML Arena</h2>
             <div className="flex items-center gap-2">
-              <div className={`w-1.5 h-1.5 rounded-full ${isOllamaOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <div className={`w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse`} />
               <span className="text-[10px] text-[#9480B3] uppercase tracking-widest font-bold">
-                {isOllamaOnline ? 'Ready' : 'Offline'}
+                Native Engine Ready
               </span>
             </div>
           </div>
@@ -428,18 +419,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 handleSend();
               }
             }}
-            placeholder={isOllamaOnline ? "Arena Prompt (Enter to broadcast to models)" : "Waiting for Ollama..."}
+            placeholder="Arena Prompt (Enter to broadcast to models)"
             className="w-full bg-[#140F1D]/80 backdrop-blur-xl border border-[#352554] rounded-3xl p-5 pr-16 text-[#E2D8F0] placeholder-[#9480B3] focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none shadow-2xl h-[72px]"
             rows={1}
-            disabled={!isOllamaOnline && !isSending}
+            disabled={isSending}
           />
           <button
             onClick={isSending ? handleStop : handleSend}
-            disabled={(!input.trim() && !isSending) || !isOllamaOnline}
+            disabled={!input.trim() && !isSending}
             className={`absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
               isSending
                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 shadow-lg shadow-indigo-900/40 active:scale-95'
-                : input.trim() && isOllamaOnline
+                : input.trim()
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/40 hover:scale-105 active:scale-95'
                 : 'bg-[#1D152A] text-gray-500 cursor-not-allowed'
             }`}

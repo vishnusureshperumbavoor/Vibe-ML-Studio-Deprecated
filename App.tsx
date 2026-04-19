@@ -14,7 +14,6 @@ import {
   Terminal,
   CheckCircle2,
   Copy,
-  RefreshCw,
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -147,7 +146,7 @@ export default function App() {
   const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
-  const [ollamaStatus, setOllamaStatus] = useState<{status: string; version?: string; message?: string; models?: any[]}>({ status: 'testing' });
+  const [chatSelectedModel, setChatSelectedModel] = useState<string>('');
   const [wasCopyAllClicked, setWasCopyAllClicked] = useState(false);
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
@@ -178,42 +177,9 @@ export default function App() {
     setTimeout(() => setWasCopyAllClicked(false), 2000);
   };
 
-  const [isRestartingKernel, setIsRestartingKernel] = useState(false);
-  const handleRestartKernel = async () => {
-    setIsRestartingKernel(true);
-    try {
-      await fetch(`${API_BASE}/restart_kernel`, { method: "POST" });
-      setThinkingHistory(["Kernel restarted. Memory cleared."]);
-      setTimeout(() => setThinkingHistory([]), 3000);
-    } catch (e) {
-      console.error("Failed to restart kernel:", e);
-    } finally {
-      setIsRestartingKernel(false);
-    }
-  };
-
   const handleOpenArena = async (modelId: string) => {
-    // 1. Refresh models to ensure the newly registered one is in the list
-    await checkOllamaStatus();
-    
-    // 2. Pre-select the model
-    setOllamaStatus(prev => ({ 
-      ...prev, 
-      selectedModel: modelId 
-    }));
-    
-    // 3. Switch to Arena view
+    setChatSelectedModel(modelId);
     setActiveView('chat');
-  };
-
-  const checkOllamaStatus = async () => {
-    try {
-      const resp = await fetch(`${API_BASE}/ollama_status`);
-      const data = await resp.json();
-      setOllamaStatus(prev => ({ ...prev, ...data }));
-    } catch (err) {
-      setOllamaStatus(prev => ({ ...prev, status: 'offline', message: 'Backend unreachable' }));
-    }
   };
 
   const fetchSystemInfo = async () => {
@@ -235,10 +201,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    checkOllamaStatus();
     fetchSystemInfo();
-    const interval = setInterval(checkOllamaStatus, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => {
@@ -955,8 +918,6 @@ export default function App() {
       } finally {
         setIsGenerating(false);
         setIsAutoRunning(false);
-        // Immediately refresh models in case code created one
-        checkOllamaStatus();
       }
       return;
     }
@@ -1190,10 +1151,8 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden relative w-full">
         {activeView === 'chat' ? (
           <ChatView 
-            ollamaModels={ollamaStatus.models || []} 
-            isOllamaOnline={ollamaStatus.status === 'online'} 
-            selectedModel={ollamaStatus.selectedModel || (ollamaStatus.models?.[0]?.name || '')}
-            onModelChange={(model) => setOllamaStatus(prev => ({ ...prev, selectedModel: model }))}
+            selectedModel={chatSelectedModel}
+            onModelChange={setChatSelectedModel}
           />
         ) : activeView === 'workflow' ? (
           <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">

@@ -133,19 +133,6 @@ try:
 except Exception as e:
     print(f"⚠️ Failed to convert LoRA to GGUF: {e}")
 
-print("📦 Packaging model for Ollama (Legacy Support)...")
-# Ollama LoRA support: FROM base, ADAPTER for weights
-modelfile_content = f"FROM {model_id}\nADAPTER .\n"
-modelfile_path = os.path.join(output_dir, "Modelfile")
 
-with open(modelfile_path, "w") as f:
-    f.write(modelfile_content)
-
-print(f"Running 'ollama create {model_slug}' from {modelfile_path}...")
-try:
-    subprocess.run(["ollama", "create", model_slug, "-f", modelfile_path], check=True)
-    print(f"✅ Model successfully imported into Ollama as '{model_slug}'!")
-except Exception as e:
-    print(f"⚠️ Failed to import into Ollama: {e}")
 
 print("✅ SFT Pipeline Complete.")
