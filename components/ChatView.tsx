@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2, Activity, Clock, Zap } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, ChevronDown, Trash2, Loader2, Sparkles, Square, Columns, Maximize2, Activity, Clock, Zap, Search, X, Database, FileText, Plus } from 'lucide-react';
 import { Button } from './Button';
 
 interface Message {
@@ -10,6 +10,7 @@ interface Message {
     ttft: number;
     tps: number;
   };
+  ragEvidence?: any[];
 }
 
 interface VMLModel {
@@ -28,7 +29,7 @@ interface ChatViewProps {
   onModelChange: (model: string) => void;
 }
 
-const renderMessageList = (messages: Message[], isSending: boolean, scrollRef: any, onScroll: any, stopStream: () => void) => {
+const renderMessageList = (messages: Message[], isSending: boolean, scrollRef: any, onScroll: any, stopStream: () => void, setActiveEvidence: (e: any[]) => void, setIsEvidenceOpen: (o: boolean) => void) => {
   return (
     <div 
       className={`flex-1 flex flex-col relative w-full h-full overflow-hidden`}
@@ -113,6 +114,19 @@ const renderMessageList = (messages: Message[], isSending: boolean, scrollRef: a
                         )}
                       </div>
 
+                      {msg.role === 'user' && msg.ragEvidence && msg.ragEvidence.length > 0 && (
+                        <button 
+                          onClick={() => {
+                            setActiveEvidence(msg.ragEvidence || []);
+                            setIsEvidenceOpen(true);
+                          }}
+                          className="mt-3 flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] text-indigo-300 font-bold hover:bg-indigo-500/20 transition-all uppercase tracking-wider"
+                        >
+                          <Search size={12} />
+                          View Semantic Sources ({msg.ragEvidence.length})
+                        </button>
+                      )}
+
                       {isAssistant && msg.stats && (
                         <div className="mt-4 pt-3 border-t border-purple-500/10 flex items-center gap-4 text-[10px] font-medium tracking-wider uppercase">
                           <div className="flex items-center gap-1.5 text-purple-400/70">
@@ -163,6 +177,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const allModels = nativeModels;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
+  const [allCollections, setAllCollections] = useState<any[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<string>('');
+  const [activeEvidence, setActiveEvidence] = useState<any[] | null>(null);
+  const [isEvidenceOpen, setIsEvidenceOpen] = useState(false);
+  
   const [messagesA, setMessagesA] = useState<Message[]>([]);
   const [messagesB, setMessagesB] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -181,7 +200,27 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   useEffect(() => {
     fetchNativeModels();
+    fetchCollections();
   }, []);
+
+  const fetchCollections = async () => {
+    try {
+      const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "list_knowledge_collections", arguments: {} })
+      });
+      const data = await resp.json();
+      const text = data[0]?.text || data.result?.[0]?.text || "";
+      if (text.includes("[JSON_RESULTS]")) {
+        const jsonStr = text.split("[JSON_RESULTS]")[1].trim();
+        const results = JSON.parse(jsonStr);
+        setAllCollections(results.collections || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch collections:", e);
+    }
+  };
 
   const fetchNativeModels = async () => {
     try {
@@ -273,10 +312,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
           buffer = buffer.slice(boundary + 1);
           if (line) {
             try {
-              // Both Ollama and VML use SSE 'data: ' prefix for consistency now
               const cleanLine = line.startsWith('data: ') ? line.slice(6) : line;
               const json = JSON.parse(cleanLine);
               
+              if (json.error) {
+                setMsg(prev => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { 
+                    ...newMessages[newMessages.length - 1],
+                    content: `Error: ${json.error}`
+                  };
+                  return newMessages;
+                });
+                break;
+              }
+
               const newContent = json.content || '';
               const newReasoning = '';
               const ttft = json.ttft;
@@ -313,9 +363,41 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const handleSend = async () => {
     if (!input.trim() || !selectedModel || isSending) return;
     
-    const userMsg: Message = { role: 'user', content: input };
-    const newHistoryA = [...messagesA, userMsg];
-    setMessagesA(newHistoryA);
+    let enrichedInput = input;
+    let ragContext = "";
+    let currentEvidence: any[] = [];
+
+    // 1. Perform RAG Search if collection is selected
+    if (selectedCollection) {
+      try {
+        const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            name: "search_knowledge", 
+            arguments: { query: input, collection: selectedCollection, limit: 3 } 
+          })
+        });
+        const data = await resp.json();
+        const text = data[0]?.text || "";
+        if (text.includes("[JSON_RESULTS]")) {
+          currentEvidence = JSON.parse(text.split("[JSON_RESULTS]")[1].trim());
+          if (currentEvidence.length > 0) {
+            ragContext = "CONTEXT FROM KNOWLEDGE BASE:\n" + currentEvidence.map((r: any, i: number) => 
+               `[Source ${i+1}: ${r.metadata.source}, Page: ${r.metadata.page}]\n${r.content}`
+            ).join("\n\n") + "\n\nINSTRUCTION: Answer the user's question ONLY based on the context above. If not found, say you don't know.\n\n";
+          }
+        }
+      } catch (e) {
+        console.error("RAG Search failed:", e);
+      }
+    }
+
+    const userMsg: Message = { role: 'user', content: input, ragEvidence: currentEvidence };
+    const systemEnrichedMsg: Message = { role: 'user', content: ragContext + input };
+    
+    const newHistoryA = [...messagesA, systemEnrichedMsg];
+    setMessagesA(prev => [...prev, userMsg]); // Show clean message to user
     
     let newHistoryB: Message[] = [];
     if (isSplitMode && selectedModel2) {
@@ -398,9 +480,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
              {isSplitMode ? <Maximize2 size={16}/> : <Columns size={16}/>}
            </Button>
 
-           {isSplitMode && (
-             <ModelSelector val={selectedModel2} onChange={setSelectedModel2} />
-           )}
+            {isSplitMode && (
+              <ModelSelector val={selectedModel2} onChange={setSelectedModel2} />
+            )}
+
+            <div className="w-[1px] h-6 bg-[#352554]/50 mx-2" />
+
+            <div className="relative group">
+              <select
+                value={selectedCollection}
+                onChange={(e) => setSelectedCollection(e.target.value)}
+                className="appearance-none bg-[#140F1D] border border-indigo-500/30 text-indigo-300 text-[10px] py-2 pl-8 pr-8 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer hover:bg-[#1D152A] max-w-[150px] truncate uppercase font-bold tracking-wider"
+              >
+                <option value="">No Knowledge</option>
+                {allCollections.map(c => <option key={c.name} value={c.name}>{c.name} ({c.count})</option>)}
+              </select>
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-400">
+                <Database size={12} />
+              </div>
+            </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -419,7 +517,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <div className="flex-1 flex w-full relative z-0 overflow-hidden">
         {renderMessageList(messagesA, isSendingA, scrollA, handleScrollA, () => {
           if (abortA.current) { abortA.current.abort(); abortA.current = null; }
-        })}
+        }, setActiveEvidence, setIsEvidenceOpen)}
         
         {isSplitMode && (
            <>
@@ -427,9 +525,42 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <div className="bg-[#0B090F]/50 flex-1 h-full w-full max-w-full overflow-hidden flex">
                  {renderMessageList(messagesB, isSendingB, scrollB, handleScrollB, () => {
                     if (abortB.current) { abortB.current.abort(); abortB.current = null; }
-                 })}
+                 }, setActiveEvidence, setIsEvidenceOpen)}
               </div>
            </>
+        )}
+
+        {/* Evidence Inspector Side-Pane */}
+        {isEvidenceOpen && activeEvidence && (
+          <div className="w-[400px] border-l border-indigo-500/20 bg-[#0D0B14]/80 backdrop-blur-2xl flex flex-col z-20 animate-in slide-in-from-right duration-300">
+            <div className="p-6 border-b border-indigo-500/10 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <Search size={16} />
+                <h3 className="text-xs font-bold uppercase tracking-widest">Evidence Inspector</h3>
+              </div>
+              <Button size="icon" variant="ghost" onClick={() => setIsEvidenceOpen(false)}>
+                <Plus className="rotate-45 text-gray-500" size={20} />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {activeEvidence.map((ev, i) => (
+                <div key={i} className="p-5 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-3 group hover:border-indigo-500/30 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-1 bg-indigo-500/20 rounded text-[10px] font-bold text-indigo-300">SOURCE {i+1}</span>
+                    <span className="text-[10px] text-gray-500 font-mono">PAGE {ev.metadata.page}</span>
+                  </div>
+                  <p className="text-sm text-indigo-100 leading-relaxed italic line-clamp-6">"{ev.content}"</p>
+                  <div className="pt-2 flex items-center gap-2 text-[10px] text-indigo-400/60 truncate">
+                    <FileText size={10} />
+                    {ev.metadata.source}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-6 bg-indigo-500/5 text-center">
+              <p className="text-[10px] text-indigo-400/40 uppercase tracking-widest font-bold">Semantic Rank: ChromaDB</p>
+            </div>
+          </div>
         )}
       </div>
 

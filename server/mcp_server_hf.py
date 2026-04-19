@@ -1,14 +1,23 @@
 import asyncio
 import os
+import sys
 import json
 import platform
 import psutil
 from dotenv import load_dotenv
+
+# Enforce UTF-8 for Windows terminal compatibility
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 from huggingface_hub import HfApi, hf_hub_download
+
+# VML RAG Integrations
+from rag_service import knowledge_manager, splitter
+import rag_ingest
 
 # Load token
 load_dotenv()
@@ -87,6 +96,59 @@ async def handle_list_tools() -> list[types.Tool]:
                     "filename": {"type": "string", "description": "Specific GGUF filename (e.g., 'qwen2-0_5b-q8_0.gguf')"}
                 },
                 "required": ["repo_id", "filename"],
+            },
+        ),
+        types.Tool(
+            name="ingest_knowledge",
+            description="Mine knowledge from a PDF or URL and index it for semantic search.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string", "description": "Local path to PDF or a Web URL"},
+                    "collection": {"type": "string", "description": "Collection name (e.g., 'HR-Handbook')"}
+                },
+                "required": ["source", "collection"],
+            },
+        ),
+        types.Tool(
+            name="search_knowledge",
+            description="Perform a semantic search across a specific knowledge collection.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural language query"},
+                    "collection": {"type": "string", "description": "Collection to search in"},
+                    "limit": {"type": "integer", "description": "Number of results", "default": 3}
+                },
+                "required": ["query", "collection"],
+            },
+        ),
+        types.Tool(
+            name="list_knowledge_collections",
+            description="List all available knowledge collections (Vector DBs).",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        types.Tool(
+            name="delete_knowledge_collection",
+            description="Delete a collection from the local vector database.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection": {"type": "string", "description": "Collection name to delete"}
+                },
+                "required": ["collection"],
+            },
+        ),
+        types.Tool(
+            name="explore_knowledge_collection",
+            description="Fetch the raw text blocks and metadata from a specific Knowledge Collection.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection": {"type": "string", "description": "Collection name to explore"},
+                    "limit": {"type": "integer", "description": "Max number of blocks to fetch", "default": 50}
+                },
+                "required": ["collection"],
             },
         )
     ]
@@ -415,6 +477,67 @@ print("🏁 VML Quantization Pipeline Complete.")
             return [types.TextContent(type="text", text=f"✅ Model downloaded successfully to: {path}")]
         except Exception as e:
             return [types.TextContent(type="text", text=f"❌ Download failed: {str(e)}")]
+
+    elif name == "ingest_knowledge":
+        source = arguments.get("source")
+        collection = arguments.get("collection")
+        
+        try:
+            if source.startswith("http"):
+                report = rag_ingest.ingest_link(source, collection)
+            else:
+                report = rag_ingest.ingest_pdf(source, collection)
+                
+            if "error" in report:
+                return [types.TextContent(type="text", text=f"❌ Ingestion failed: {report['error']}")]
+                
+            stats = {
+                "report": report,
+                "total_storage_mb": knowledge_manager.get_storage_stats()
+            }
+            return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(stats, indent=2)}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Ingestion failed: {str(e)}")]
+
+    elif name == "search_knowledge":
+        query = arguments.get("query")
+        collection = arguments.get("collection")
+        limit = arguments.get("limit", 3)
+        
+        try:
+            results = knowledge_manager.search(collection, query, limit=limit)
+            return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(results, indent=2)}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Search failed: {str(e)}")]
+
+    elif name == "list_knowledge_collections":
+        try:
+            collections = knowledge_manager.list_collections()
+            stats = {
+                "collections": collections,
+                "total_storage_mb": knowledge_manager.get_storage_stats()
+            }
+            return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(stats, indent=2)}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Failed to list collections: {str(e)}")]
+
+    elif name == "delete_knowledge_collection":
+        collection = arguments.get("collection")
+        try:
+            knowledge_manager.delete_collection(collection)
+            stats = {"total_storage_mb": knowledge_manager.get_storage_stats()}
+            return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(stats)}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Delete failed: {str(e)}")]
+
+    elif name == "explore_knowledge_collection":
+        collection = arguments.get("collection")
+        limit = arguments.get("limit", 50)
+        try:
+            results = knowledge_manager.explore_collection(collection, limit=limit)
+            return [types.TextContent(type="text", text=f"[JSON_RESULTS]\n{json.dumps(results, indent=2)}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Exploration failed: {str(e)}")]
 
     elif name == "get_system_specs":
         cpu_count = psutil.cpu_count(logical=True)

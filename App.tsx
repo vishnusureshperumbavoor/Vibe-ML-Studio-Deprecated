@@ -14,11 +14,15 @@ import {
   Terminal,
   CheckCircle2,
   Copy,
+  Database,
+  Search,
+  BookOpen
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
 import { Button } from "./components/Button";
 import ManageSkillsPanel from "./components/ManageSkillsPanel";
+import { KnowledgeLibrary } from "./components/KnowledgeLibrary";
 import {
   CellData,
   CellType,
@@ -142,7 +146,7 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow'>('studio');
+  const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow' | 'knowledge'>('studio');
   const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
@@ -1147,27 +1151,58 @@ export default function App() {
 
           {/* View Switcher */}
           <div className="flex bg-[#0B090F] p-1 rounded-xl border border-[#352554] mr-2">
-            <button
-              onClick={() => setActiveView('studio')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'studio' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveView("studio")}
+              className={`gap-2 h-10 px-4 rounded-xl transition-all duration-300 border ${
+                activeView === "studio"
+                  ? "bg-purple-500/20 text-purple-200 border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                  : "text-gray-400 border-transparent hover:bg-white/5"
+              }`}
             >
-              <Terminal size={14} />
-              <span>Studio</span>
-            </button>
-            <button
-              onClick={() => setActiveView('workflow')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'workflow' ? 'bg-amber-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+              <Terminal size={16} />
+              <span className="text-xs font-semibold">Studio</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveView("workflow")}
+              className={`gap-2 h-10 px-4 rounded-xl transition-all duration-300 border ${
+                activeView === "workflow"
+                  ? "bg-amber-500/20 text-amber-200 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.15)]"
+                  : "text-gray-400 border-transparent hover:bg-white/5"
+              }`}
             >
-              <Activity size={14} />
-              <span>Build</span>
-            </button>
-            <button
-              onClick={() => setActiveView('chat')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 ${activeView === 'chat' ? 'bg-purple-600 text-white shadow-lg' : 'text-[#9480B3] hover:text-white'}`}
+              <Activity size={16} />
+              <span className="text-xs font-semibold">Build</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveView("chat")}
+              className={`gap-2 h-10 px-4 rounded-xl transition-all duration-300 border ${
+                activeView === "chat"
+                  ? "bg-purple-500/20 text-purple-200 border-purple-500/40 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+                  : "text-gray-400 border-transparent hover:bg-white/5"
+              }`}
             >
-              <MessageSquare size={14} />
-              <span>Arena</span>
-            </button>
+              <MessageSquare size={16} />
+              <span className="text-xs font-semibold">Arena</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveView("knowledge")}
+              className={`gap-2 h-10 px-4 rounded-xl transition-all duration-300 border ${
+                activeView === "knowledge"
+                  ? "bg-indigo-500/20 text-indigo-200 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+                  : "text-gray-400 border-transparent hover:bg-white/5"
+              }`}
+            >
+              <Database size={16} />
+              <span className="text-xs font-semibold">Knowledge</span>
+            </Button>
           </div>
 
           {isAutoRunning && (
@@ -1194,6 +1229,8 @@ export default function App() {
             selectedModel={chatSelectedModel}
             onModelChange={setChatSelectedModel}
           />
+        ) : activeView === 'knowledge' ? (
+          <KnowledgeLibrary />
         ) : activeView === 'workflow' ? (
           <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">
             <div className="text-center space-y-4 max-w-2xl">

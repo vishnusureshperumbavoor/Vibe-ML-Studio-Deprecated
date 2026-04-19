@@ -24,5 +24,12 @@ huggingface_hub
 # VML MCP Protocol
 mcp
 
+# VML RAG Pipeline (Intelligence Engine)
+chromadb
+sentence-transformers
+pymupdf
+beautifulsoup4
+lxml
+
 # Utilities
 numpy
