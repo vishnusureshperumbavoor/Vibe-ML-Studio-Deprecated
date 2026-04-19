@@ -167,7 +167,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const fetchNativeModels = async () => {
     try {
-      const res = await fetch('http://localhost:2000/list_native_models');
+      const res = await fetch('http://127.0.0.1:2000/list_native_models');
       const data = await res.json();
       setNativeModels(data.models || []);
     } catch (e) {
@@ -419,7 +419,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 handleSend();
               }
             }}
-            placeholder="Arena Prompt (Enter to broadcast to models)"
+            placeholder="Enter prompt"
             className="w-full bg-[#140F1D]/80 backdrop-blur-xl border border-[#352554] rounded-3xl p-5 pr-16 text-[#E2D8F0] placeholder-[#9480B3] focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none shadow-2xl h-[72px]"
             rows={1}
             disabled={isSending}
