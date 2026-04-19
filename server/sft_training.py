@@ -95,7 +95,45 @@ print(f"💾 Saving final model weights to {output_dir}...")
 os.makedirs(output_dir, exist_ok=True)
 trainer.save_model(output_dir)
 
-print("📦 Packaging model for Ollama...")
+print("📦 Converting LoRA to GGUF for Native Engine...")
+cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache", "vml-tools")
+os.makedirs(cache_dir, exist_ok=True)
+converter_path = os.path.join(cache_dir, "convert_lora_to_gguf.py")
+dep_path = os.path.join(cache_dir, "convert_hf_to_gguf.py")
+
+import urllib.request
+if not os.path.exists(converter_path):
+    print("📥 Downloading llama.cpp LoRA converter...")
+    urllib.request.urlretrieve("https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_lora_to_gguf.py", converter_path)
+    
+if not os.path.exists(dep_path):
+    print("📥 Downloading converter dependencies...")
+    req = urllib.request.Request("https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_hf_to_gguf.py")
+    with urllib.request.urlopen(req) as response:
+        text = response.read().decode('utf-8')
+    
+    # Safe patch for bleeding-edge gguf library compatibility
+    patch = """
+import gguf
+try:
+    if not hasattr(gguf.MODEL_ARCH, 'GEMMA4'): setattr(gguf.MODEL_ARCH, 'GEMMA4', 1000)
+    if not hasattr(gguf.MODEL_ARCH, 'MISTRAL4'): setattr(gguf.MODEL_ARCH, 'MISTRAL4', 1001)
+    if not hasattr(gguf.VisionProjectorType, 'GEMMA4V'): setattr(gguf.VisionProjectorType, 'GEMMA4V', 1002)
+    if not hasattr(gguf.VisionProjectorType, 'GEMMA4A'): setattr(gguf.VisionProjectorType, 'GEMMA4A', 1003)
+except Exception: pass
+"""
+    text = text.replace("from __future__ import annotations", "from __future__ import annotations\n" + patch)
+    with open(dep_path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+print(f"🔄 Running GGUF conversion on {output_dir}...")
+try:
+    subprocess.run(["python", converter_path, output_dir, "--outfile", os.path.join(output_dir, "adapter.gguf")], check=True)
+    print("✅ LoRA successfully converted to GGUF format for the Native Arena!")
+except Exception as e:
+    print(f"⚠️ Failed to convert LoRA to GGUF: {e}")
+
+print("📦 Packaging model for Ollama (Legacy Support)...")
 # Ollama LoRA support: FROM base, ADAPTER for weights
 modelfile_content = f"FROM {model_id}\nADAPTER .\n"
 modelfile_path = os.path.join(output_dir, "Modelfile")

@@ -9,6 +9,8 @@ import tempfile
 import sys
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+from inference import native_manager
+from typing import List, Optional
 
 # Load HF_TOKEN from server/.env
 load_dotenv()
@@ -48,6 +50,11 @@ class FileWriteRequest(BaseModel):
 class RegisterRequest(BaseModel):
     model_name: str
     model_slug: str
+
+class NativeChatRequest(BaseModel):
+    model_filename: str
+    messages: List[dict]
+    lora_slug: Optional[str] = None
 
 from fastapi.responses import StreamingResponse
 import json
@@ -254,14 +261,26 @@ async def register_model(req: RegisterRequest):
                 yield f"data: {json.dumps({'status': 'error', 'message': f'Modelfile not found in {req.model_slug}'})}\n\n"
                 return
 
-            # 2. Pre-process Modelfile
+            # 2. Pre-process Modelfile (Automatic Agentic Correction)
             with open(modelfile_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
             
             updated = False
             for i, line in enumerate(lines):
+                # Map HF IDs to local Ollama tags
                 if "FROM Qwen/Qwen2-0.5B" in line:
                     lines[i] = "FROM qwen2:0.5b\n"
+                    updated = True
+                elif "FROM meta-llama/Meta-Llama-3" in line:
+                    lines[i] = "FROM llama3\n"
+                    updated = True
+                elif "FROM HuggingFaceTB/SmolLM" in line:
+                    lines[i] = "FROM smollm\n"
+                    updated = True
+                
+                # Fix ambiguous adapter paths for Windows
+                if "ADAPTER ." in line:
+                    lines[i] = "ADAPTER adapter_model.safetensors\n"
                     updated = True
             
             if updated:
@@ -306,6 +325,68 @@ async def register_model(req: RegisterRequest):
             yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(status_stream(), media_type="text/event-stream")
+
+
+@app.post("/v1/native/chat")
+async def native_chat(req: NativeChatRequest):
+    """
+    Streaming endpoint for native llama.cpp inference.
+    Supports base GGUF + optional LoRA adapters.
+    """
+    async def chat_generator():
+        try:
+            # 1. Resolve LoRA path if provided
+            lora_path = None
+            if req.lora_slug:
+                # Adapters are stored in server/data/<slug>
+                abs_lora_dir = os.path.join(DATA_DIR, req.lora_slug)
+                if os.path.exists(abs_lora_dir):
+                    lora_path = abs_lora_dir
+            
+            # 2. Load the model (manager handles swapping/caching)
+            native_manager.load_model(req.model_filename, lora_path)
+            
+            # 3. Stream tokens
+            for token in native_manager.chat_stream(req.messages):
+                yield f"data: {json.dumps({'content': token})}\n\n"
+            
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            
+    return StreamingResponse(chat_generator(), media_type="text/event-stream")
+
+
+@app.get("/list_native_models")
+async def list_native_models():
+    """
+    Returns a unified list of available native models.
+    Includes base GGUFs and detected Fine-tuned adapters.
+    """
+    models_dir = os.path.join(BASE_DIR, "models")
+    results = []
+    
+    # 1. Base Models (.gguf)
+    if os.path.exists(models_dir):
+        for f in os.listdir(models_dir):
+            if f.lower().endswith(".gguf"):
+                results.append({"name": f, "source": "native", "type": "base"})
+    
+    # 2. Fine-tuned Adapters (Folders in /data with safetensors)
+    if os.path.exists(DATA_DIR):
+        for slug in os.listdir(DATA_DIR):
+            lora_dir = os.path.join(DATA_DIR, slug)
+            if os.path.isdir(lora_dir):
+                # Check for adapter weights
+                if os.path.exists(os.path.join(lora_dir, "adapter_model.safetensors")):
+                    results.append({
+                        "name": f"Fine-tuned: {slug}", 
+                        "source": "native", 
+                        "type": "adapter",
+                        "lora_slug": slug
+                    })
+                    
+    return {"models": results}
 
 
 @app.post("/save_token")

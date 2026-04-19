@@ -49,6 +49,7 @@ dist-ssr
 
 # Vibe Data & Venv
 server/data/
+server/models/
 server/venv/
 *.nii.gz
 *.tar

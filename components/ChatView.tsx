@@ -8,8 +8,11 @@ interface Message {
   reasoning?: string;
 }
 
-interface OllamaModel {
+interface VMLModel {
   name: string;
+  source: 'ollama' | 'native';
+  type?: 'base' | 'adapter';
+  lora_slug?: string;
   details?: {
     parameter_size: string;
     family: string;
@@ -17,7 +20,7 @@ interface OllamaModel {
 }
 
 interface ChatViewProps {
-  ollamaModels: OllamaModel[];
+  ollamaModels: VMLModel[];
   isOllamaOnline: boolean;
   selectedModel: string;
   onModelChange: (model: string) => void;
@@ -141,6 +144,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
 }) => {
   const [isSplitMode, setIsSplitMode] = useState(false);
   const [selectedModel2, setSelectedModel2] = useState('');
+  const [nativeModels, setNativeModels] = useState<VMLModel[]>([]);
+
+  // Filter list to only show Native (llama-cpp-python) models as requested
+  const allModels = nativeModels;
 
   const [messagesA, setMessagesA] = useState<Message[]>([]);
   const [messagesB, setMessagesB] = useState<Message[]>([]);
@@ -159,11 +166,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const abortB = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (ollamaModels.length > 0) {
-      if (!selectedModel) onModelChange(ollamaModels[0].name);
-      if (!selectedModel2) setSelectedModel2(ollamaModels.length > 1 ? ollamaModels[1].name : ollamaModels[0].name);
+    fetchNativeModels();
+  }, []);
+
+  const fetchNativeModels = async () => {
+    try {
+      const res = await fetch('http://localhost:2000/list_native_models');
+      const data = await res.json();
+      setNativeModels(data.models || []);
+    } catch (e) {
+      console.warn("Native models offline");
     }
-  }, [ollamaModels, selectedModel, selectedModel2, onModelChange]);
+  };
+
+  useEffect(() => {
+    if (allModels.length > 0) {
+      if (!selectedModel) onModelChange(allModels[0].name);
+      if (!selectedModel2) setSelectedModel2(allModels.length > 1 ? allModels[1].name : allModels[0].name);
+    }
+  }, [allModels.length, selectedModel, selectedModel2]);
 
   const handleScrollA = () => {
     if (scrollA.current) {
@@ -200,15 +221,28 @@ export const ChatView: React.FC<ChatViewProps> = ({
     abortCtrl.current = new AbortController();
     setSending(true);
 
+    const modelObj = allModels.find(m => m.name === modelName);
+    const isNative = modelObj?.source === 'native';
+    
+    // Choose endpoint based on source
+    const url = isNative ? 'http://127.0.0.1:2000/v1/native/chat' : 'http://127.0.0.1:11434/api/chat';
+    
+    // Build payload
+    const body = isNative ? {
+      model_filename: modelObj.type === 'base' ? modelObj.name : 'qwen2-0_5b-q8_0.gguf',
+      messages: history,
+      lora_slug: modelObj.lora_slug
+    } : {
+      model: modelName,
+      messages: history,
+      stream: true,
+    };
+
     try {
-      const response = await fetch('http://127.0.0.1:11434/api/chat', {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          messages: history,
-          stream: true,
-        }),
+        body: JSON.stringify(body),
         signal: abortCtrl.current.signal,
       });
 
@@ -230,22 +264,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
           buffer = buffer.slice(boundary + 1);
           if (line) {
             try {
-              const json = JSON.parse(line);
-              if (json.message) {
-                const newContent = json.message.content || '';
-                const newReasoning = json.message.reasoning_content || '';
-                if (newContent || newReasoning) {
-                  setMsg(prev => {
-                    const newMessages = [...prev];
-                    const lastMsg = newMessages[newMessages.length - 1];
-                    newMessages[newMessages.length - 1] = { 
-                      ...lastMsg,
-                      content: lastMsg.content + newContent,
-                      reasoning: (lastMsg.reasoning || '') + newReasoning
-                    };
-                    return newMessages;
-                  });
-                }
+              // Both Ollama and VML use SSE 'data: ' prefix for consistency now
+              const cleanLine = line.startsWith('data: ') ? line.slice(6) : line;
+              const json = JSON.parse(cleanLine);
+              
+              const newContent = isNative ? (json.content || '') : (json.message?.content || '');
+              const newReasoning = isNative ? '' : (json.message?.reasoning_content || '');
+              
+              if (newContent || newReasoning) {
+                setMsg(prev => {
+                  const newMessages = [...prev];
+                  const lastMsg = newMessages[newMessages.length - 1];
+                  newMessages[newMessages.length - 1] = { 
+                    ...lastMsg,
+                    content: lastMsg.content + newContent,
+                    reasoning: (lastMsg.reasoning || '') + newReasoning
+                  };
+                  return newMessages;
+                });
               }
             } catch (e) {}
           }
@@ -254,7 +290,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
-        setMsg(prev => [...prev, { role: 'assistant', content: "Error: Failed to reach Ollama." }]);
+        setMsg(prev => [...prev, { role: 'assistant', content: `Error: Failed to reach ${isNative ? 'Native' : 'Ollama'} Engine.` }]);
       }
     } finally {
       setSending(false);
@@ -290,12 +326,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <select
         value={val}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-[#1D152A] border border-purple-500/30 text-[#E2D8F0] text-xs py-2 pl-3 pr-8 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer hover:bg-[#251B36] max-w-[160px] truncate"
-        disabled={!isOllamaOnline || ollamaModels.length === 0}
+        className="appearance-none bg-[#1D152A] border border-purple-500/30 text-[#E2D8F0] text-xs py-2 pl-3 pr-8 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500 transition-all cursor-pointer hover:bg-[#251B36] max-w-[180px] truncate"
+        disabled={allModels.length === 0}
       >
-        {ollamaModels.length > 0 ? (
-          ollamaModels.map((m) => (
-            <option key={m.name} value={m.name}>
+        {allModels.length > 0 ? (
+          allModels.map((m) => (
+            <option key={`${m.source}-${m.name}`} value={m.name}>
               {m.name.toUpperCase()} {m.details?.parameter_size ? `• ${m.details.parameter_size}` : ''}
             </option>
           ))

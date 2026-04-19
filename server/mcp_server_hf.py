@@ -76,6 +76,18 @@ async def handle_list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {},
             },
+        ),
+        types.Tool(
+            name="fetch_gguf",
+            description="Download a GGUF model file from the Hugging Face Hub directly into the VML models directory.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_id": {"type": "string", "description": "Hugging Face Repo ID (e.g., 'Qwen/Qwen2-0.5B-GGUF')"},
+                    "filename": {"type": "string", "description": "Specific GGUF filename (e.g., 'qwen2-0_5b-q8_0.gguf')"}
+                },
+                "required": ["repo_id", "filename"],
+            },
         )
     ]
 
@@ -133,6 +145,15 @@ async def handle_call_tool(
         dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
         model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
         output_dir = f"./data/{model_slug}"
+        
+        # Sanitize base model for Ollama mapping
+        ollama_base = base_model
+        if "Qwen2-0.5B" in base_model:
+            ollama_base = "qwen2:0.5b"
+        elif "Llama-3" in base_model:
+            ollama_base = "llama3"
+        elif "SmolLM" in base_model:
+            ollama_base = "smollm"
         
         # Split into logical blocks for the notebook
         blocks = [
@@ -240,14 +261,14 @@ trainer.save_model("{output_dir}")
 
 print("Packaging for Ollama...")
 # Ollama LoRA support: FROM the base model, ADAPTER for the fine-tuned folder
-modelfile_content = f"FROM {base_model}\\nADAPTER .\\n"
+modelfile_content = f"FROM {ollama_base}\\nADAPTER adapter_model.safetensors\\n"
 modelfile_path = f"{output_dir}/Modelfile"
 
 with open(modelfile_path, "w") as f:
     f.write(modelfile_content)
 
 try:
-    # Crucial: Run from within the data folder so ADAPTER . works correctly
+    # Crucial: Run from within the data folder so ADAPTER paths work correctly
     subprocess.run(["ollama", "create", "{model_slug}", "-f", "Modelfile"], cwd="{output_dir}", check=True)
     print(f"Model successfully imported into Ollama as '{model_slug}'!")
 except Exception as e:
@@ -296,6 +317,29 @@ except Exception as e:
     print(f"⚠️ Failed to import into Ollama: {{e}}")
 '''
         return [types.TextContent(type="text", text=script)]
+
+    elif name == "fetch_gguf":
+        repo_id = arguments.get("repo_id")
+        filename = arguments.get("filename")
+        
+        from huggingface_hub import hf_hub_download
+        
+        # models directory relative to mcp_server_hf.py
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        models_dir = os.path.join(base_dir, "models")
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+            
+        try:
+            path = hf_hub_download(
+                repo_id=repo_id, 
+                filename=filename, 
+                local_dir=models_dir,
+                token=hf_token
+            )
+            return [types.TextContent(type="text", text=f"✅ Model downloaded successfully to: {path}")]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"❌ Download failed: {str(e)}")]
 
     elif name == "get_system_specs":
         import platform
