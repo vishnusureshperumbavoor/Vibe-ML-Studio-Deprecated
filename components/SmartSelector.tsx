@@ -29,18 +29,17 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
 
   // Fetch local data on mount for fast search
   useEffect(() => {
-    if (type === 'dataset') {
-      const fetchLocal = async () => {
-        try {
-          const resp = await fetch("http://127.0.0.1:2000/list_local_datasets");
-          const data = await resp.json();
-          setLocalData(data.datasets || []);
-        } catch (e) {
-          console.error("Local fetch failed:", e);
-        }
-      };
-      fetchLocal();
-    }
+    const fetchLocal = async () => {
+      try {
+        const endpoint = type === 'model' ? "/list_local_base_models" : "/list_local_datasets";
+        const resp = await fetch(`http://127.0.0.1:2000${endpoint}`);
+        const data = await resp.json();
+        setLocalData(data.models || data.datasets || []);
+      } catch (e) {
+        console.error("Local fetch failed:", e);
+      }
+    };
+    fetchLocal();
   }, [type]);
 
   // Close dropdown on click outside
@@ -62,12 +61,10 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
     
     try {
       // 1. Search Local First
-      const localMatches = type === 'dataset' 
-        ? localData.filter(d => 
-            d.id.toLowerCase().includes(q.toLowerCase()) || 
-            d.display_name.toLowerCase().includes(q.toLowerCase())
-          ).map(d => ({...d, is_local: true}))
-        : [];
+      const localMatches = localData.filter(d => 
+        d.id.toLowerCase().includes(q.toLowerCase()) || 
+        (d.display_name && d.display_name.toLowerCase().includes(q.toLowerCase()))
+      ).map(d => ({...d, is_local: true}));
 
       // 2. Search Remote via MCP
       const toolName = type === 'model' ? 'model_search' : 'dataset_search';
@@ -108,9 +105,14 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
       }
 
       // Merge and unique-ify (prefer local if ID matches)
+      // For models, we compare normalized IDs
       const combined = [...localMatches];
       remoteResults.forEach(rem => {
-        if (!combined.some(loc => loc.id === rem.id)) {
+        const isAlreadyIn = combined.some(loc => 
+            loc.id.toLowerCase() === rem.id.toLowerCase() || 
+            loc.id.replace('_', '/').toLowerCase() === rem.id.toLowerCase()
+        );
+        if (!isAlreadyIn) {
           combined.push(rem);
         }
       });
@@ -186,7 +188,8 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
                 key={res.id}
                 onClick={() => {
                   skipSearchRef.current = true;
-                  setQuery(res.id);
+                  const cleanName = res.is_local && type === 'dataset' ? res.id.replace('.jsonl', '') : res.id;
+                  setQuery(cleanName);
                   onSelect(res.id);
                   setIsOpen(false);
                   setResults([]);
@@ -195,7 +198,7 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
               >
                 <div className="flex items-center justify-between w-full gap-2">
                   <span className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors truncate">
-                    {res.is_local ? res.id.replace('.jsonl', '') : res.id}
+                    {res.is_local && type === 'dataset' ? res.id.replace('.jsonl', '') : res.id}
                   </span>
                   <div className="flex items-center gap-1.5 flex-none text-[10px] font-bold">
                     {res.is_local && (
@@ -219,7 +222,7 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
                 <div className="flex items-center gap-4 mt-2 text-[10px] text-white/40 font-medium">
                   {res.is_local ? (
                     <span className="flex items-center gap-1 text-emerald-400/60 uppercase">
-                      Local Dataset • {res.size_kb ? (res.size_kb > 1024 ? `${(res.size_kb/1024).toFixed(1)} MB` : `${res.size_kb} KB`) : '0 KB'}
+                      Local {type === 'model' ? 'Base Model' : 'Dataset'} {res.size_kb ? `• ${res.size_kb > 1024 ? `${(res.size_kb/1024).toFixed(1)} MB` : `${res.size_kb} KB`}` : ''}
                     </span>
                   ) : (
                     <>

@@ -395,6 +395,32 @@ async def reset_distill():
     distiller.status = {"step": "idle", "progress": 0, "current_task": ""}
     return {"status": "reset"}
 
+@app.get("/list_local_base_models")
+async def list_local_base_models():
+    """Scans server/models/base_models for downloaded HF repositories."""
+    results = []
+    if not os.path.exists(MODELS_DIR):
+        return {"models": []}
+        
+    for d in os.listdir(MODELS_DIR):
+        dir_path = os.path.join(MODELS_DIR, d)
+        if os.path.isdir(dir_path):
+            # Attempt to restore the HF repo ID from the directory name
+            # (Matches the replace('/', '_') logic in the training scripts)
+            # In a production app, we'd store a .meta file, but this heuristic works for now
+            display_id = d.replace('_', '/')
+            
+            # Basic validation: check for a config.json or safetensors
+            if any(f in os.listdir(dir_path) for f in ["config.json", "model.safetensors", "pytorch_model.bin"]):
+                results.append({
+                    "id": display_id,
+                    "is_local": True,
+                    "is_cpu_ready": "0.5b" in display_id.lower() or "360m" in display_id.lower(),
+                    "downloads": 0,
+                    "likes": 0
+                })
+    return {"models": results}
+
 @app.get("/list_local_datasets")
 async def list_local_datasets():
     """Scans server/data/datasets for .jsonl files and returns them as searchable items."""
@@ -434,7 +460,6 @@ async def list_local_datasets():
                 "hf_url": hf_url
             })
     return {"datasets": results}
-
 
 if __name__ == "__main__":
     import uvicorn

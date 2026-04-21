@@ -46,6 +46,9 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
     setIsForecasting(true);
     setForecast(null);
     try {
+      // Extract original domain from dataset name (e.g., trenser_distilled_123 -> trenser)
+      const domain = datasetId.split('_distilled_')[0].replace(/_/g, ' ');
+
       const prompt = [
         { role: 'system', content: `You are a Senior ML Engineer at Vibe-ML Studio. Provide a predictive "Forecast" for this SFT run. 
         
@@ -59,9 +62,9 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
         2. Assess Model size vs Hardware. Since we use LoRA and 20 steps, Qwen-0.5B on CPU is FULLY SUPPORTED and fast.
         
         If it IS compatible, provide exactly two paragraphs:
-        Paragraph 1: The narrative transformation (personality/skills) and a HARDWARE-AWARE ESTIMATION (e.g. "Estimated Duration: ~8 mins on your CPU"). Explain how the selected Epochs (Learning Depth) and LoRA Rank (Capacity) will affect the quality of this specific model.
-        Paragraph 2: 2-3 specific prompts to test the model AFTER training.` },
-        { role: 'user', content: `Base Model: ${modelId}\nKnowledge Dataset: ${datasetId}\nHardware Target: ${hardware}\nEpochs: ${epochs}\nLoRA Rank: ${rank}\nDetected System Specs: ${JSON.stringify(systemInfo)}` }
+        Paragraph 1: The narrative transformation (how this model will change after learning about "${domain}") and a HARDWARE-AWARE ESTIMATION (e.g. "Estimated Duration: ~8 mins on your CPU"). Explain how the selected Epochs and LoRA Rank will affect the depth of "${domain}" knowledge.
+        Paragraph 2: 3 specific, DOMAIN-RELEVANT prompts that a user would actually ask a model trained on ${domain} knowledge. Avoid generic AI prompts like "Climate Change" or "Fantasy" unless the dataset is actually about those.` },
+        { role: 'user', content: `Base Model: ${modelId}\nKnowledge Dataset: ${datasetId} (Domain: ${domain})\nHardware Target: ${hardware}\nEpochs: ${epochs}\nLoRA Rank: ${rank}\nDetected System Specs: ${JSON.stringify(systemInfo)}` }
       ];
       const result = await callKimi(prompt);
       setForecast(result);
