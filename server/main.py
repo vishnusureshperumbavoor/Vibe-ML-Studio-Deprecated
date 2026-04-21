@@ -390,6 +390,47 @@ async def reset_distill():
     distiller.status = {"step": "idle", "progress": 0, "current_task": ""}
     return {"status": "reset"}
 
+@app.get("/list_local_datasets")
+async def list_local_datasets():
+    """Scans server/data/datasets for .jsonl files and returns them as searchable items."""
+    dataset_dir = os.path.join(BASE_DIR, "data", "datasets")
+    results = []
+    if not os.path.exists(dataset_dir):
+        return {"datasets": []}
+        
+    for f in os.listdir(dataset_dir):
+        if f.endswith(".jsonl"):
+            # example: collection_distilled_12345.jsonl -> collection
+            display_name = f.split("_distilled_")[0]
+            
+            # Check file size
+            try:
+                size_kb = os.path.getsize(os.path.join(dataset_dir, f)) // 1024
+            except:
+                size_kb = 0
+                
+            # Check for metadata (HF URL)
+            hf_url = None
+            meta_path = os.path.join(dataset_dir, f + ".meta")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, 'r') as mf:
+                        meta_data = json.load(mf)
+                        hf_url = meta_data.get("hf_url")
+                except:
+                    pass
+                
+            results.append({
+                "id": f, 
+                "display_name": display_name,
+                "downloads": 0, 
+                "likes": 0, 
+                "is_local": True,
+                "size_kb": size_kb,
+                "hf_url": hf_url
+            })
+    return {"datasets": results}
+
 
 if __name__ == "__main__":
     import uvicorn

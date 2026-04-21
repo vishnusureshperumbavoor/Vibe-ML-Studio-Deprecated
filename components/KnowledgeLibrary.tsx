@@ -42,6 +42,17 @@ export const KnowledgeLibrary: React.FC = () => {
   const [sourceInput, setSourceInput] = useState('');
   const [newCollectionName, setNewCollectionName] = useState('');
   const newNameRef = React.useRef<HTMLInputElement>(null);
+  const [localDatasets, setLocalDatasets] = useState<any[]>([]);
+
+  const fetchLocalDatasets = async () => {
+    try {
+      const resp = await fetch("http://127.0.0.1:2000/list_local_datasets");
+      const data = await resp.json();
+      setLocalDatasets(data.datasets || []);
+    } catch (e) {
+      console.error("Failed to fetch local datasets:", e);
+    }
+  };
 
   const fetchCollections = async () => {
     setIsLoading(true);
@@ -68,6 +79,7 @@ export const KnowledgeLibrary: React.FC = () => {
 
   useEffect(() => {
     fetchCollections();
+    fetchLocalDatasets();
     const history = localStorage.getItem('vml_source_history');
     if (history) setSourceHistory(JSON.parse(history));
   }, []);
@@ -107,6 +119,7 @@ export const KnowledgeLibrary: React.FC = () => {
     };
 
     fetchExplorerData();
+    fetchLocalDatasets(); // RE-FETCH on selection
   }, [selectedCollection]);
 
   // Distillation Status Polling
@@ -120,6 +133,15 @@ export const KnowledgeLibrary: React.FC = () => {
           setDistillStatus(data);
           if (data.step === 'complete' || data.step === 'error') {
             clearInterval(interval);
+            fetchLocalDatasets(); // RE-FETCH on completion
+            
+            // AUTOMATIC REDIRECT: If a URL is found in the complete status, teleport the user
+            if (data.step === 'complete' && data.current_task.includes('http')) {
+              const url = data.current_task.split('Published to: ')[1] || data.current_task.split('Deployed! ')[1];
+              if (url) {
+                window.open(url, '_blank');
+              }
+            }
           }
         } catch (e) {
           console.error("Status poll failed", e);
@@ -210,7 +232,7 @@ export const KnowledgeLibrary: React.FC = () => {
         const report = stats.report;
         
         setStatusMsg({ 
-          text: `✅ Harvest Complete: ${report.chunks} blocks indexed from ${report.source} (${Math.round(report.chars/1000)}k chars).`, 
+          text: `✅ Harvest Complete: ${report.chunks} chunks indexed from ${report.source} (${Math.round(report.chars/1000)}k chars).`, 
           type: 'success' 
         });
 
@@ -328,7 +350,7 @@ export const KnowledgeLibrary: React.FC = () => {
                       <div className={`w-2 h-2 rounded-full ${selectedCollection === c.name ? 'bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-gray-600'}`} />
                       <div className="flex flex-col">
                         <span className="text-sm font-medium">{c.name}</span>
-                        <span className="text-[10px] text-gray-500 font-mono tracking-tighter">{c.count} blocks</span>
+                        <span className="text-[10px] text-gray-500 font-mono tracking-tighter">{c.count} chunks</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -549,14 +571,31 @@ export const KnowledgeLibrary: React.FC = () => {
                   
                   {collectionData.length > 0 && !isExploring && (
                     <div className="flex items-center gap-2">
-                       <Button 
-                        variant="ghost" 
-                        onClick={() => handleStartDistillation(true)}
-                        className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group"
-                      >
-                        <Sparkles size={12} className="group-hover:animate-pulse" />
-                        Distill to Dataset
-                      </Button>
+                       {localDatasets.find(ds => ds.display_name === selectedCollection && ds.hf_url) ? (
+                         <a 
+                           href={localDatasets.find(ds => ds.display_name === selectedCollection && ds.hf_url)?.hf_url}
+                           target="_blank"
+                           rel="noreferrer"
+                           className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold hover:bg-emerald-500/20 transition-all animate-in zoom-in-95"
+                         >
+                            <ExternalLink size={12} />
+                            View distilled dataset on HF
+                         </a>
+                       ) : localDatasets.some(ds => ds.display_name === selectedCollection) ? (
+                         <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-bold animate-in zoom-in-95">
+                            <CheckCircle2 size={12} />
+                            Dataset Ready (Local)
+                         </div>
+                       ) : (
+                         <Button 
+                          variant="ghost" 
+                          onClick={() => handleStartDistillation(true)}
+                          className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group"
+                        >
+                          <Sparkles size={12} className="group-hover:animate-pulse" />
+                          Distill to Dataset
+                        </Button>
+                       )}
                       <Button 
                         variant="ghost" 
                         onClick={() => handleCopyBlock(collectionData.map(b => b.content).join('\n\n'), 'all')}
@@ -643,7 +682,7 @@ export const KnowledgeLibrary: React.FC = () => {
                 {isExploring ? (
                   <div className="p-12 text-center rounded-2xl bg-[#0B090F]/50 border border-dashed border-purple-500/10 flex flex-col items-center justify-center gap-3">
                     <Loader2 size={24} className="animate-spin text-purple-400" />
-                    <span className="text-gray-500 text-sm">Decoding Semantic Blocks...</span>
+                    <span className="text-gray-500 text-sm">Decoding Semantic Chunks...</span>
                   </div>
                 ) : collectionData.length === 0 ? (
                   <div className="p-12 text-center rounded-2xl bg-[#0B090F]/50 border border-dashed border-purple-500/10 text-gray-500 text-sm">
@@ -678,7 +717,7 @@ export const KnowledgeLibrary: React.FC = () => {
                       </div>
                     ))}
                     <div className="text-center pt-2 pb-4">
-                      <span className="text-xs font-mono text-purple-500/40 uppercase tracking-widest">End of Array (Showing max 50 blocks)</span>
+                      <span className="text-xs font-mono text-purple-500/40 uppercase tracking-widest">End of Array (Showing max 50 chunks)</span>
                     </div>
                   </div>
                 )}

@@ -91,14 +91,14 @@ class VMLDistiller:
                 return None
 
             total_chunks = len(raw_data)
-            self.update_status("distilling", 20, f"Mining {total_chunks} blocks with Kimi...")
+            self.update_status("distilling", 20, f"Mining {total_chunks} chunks with Kimi...")
 
             dataset = []
-            for i, block in enumerate(raw_data):
+            for i, chunk in enumerate(raw_data):
                 progress = 20 + int((i / total_chunks) * 50)
-                self.update_status("distilling", progress, f"Synthesizing block {i+1}/{total_chunks}")
+                self.update_status("distilling", progress, f"Synthesizing chunk {i+1}/{total_chunks}")
                 
-                pairs = self.generate_alpaca_pairs(block['content'])
+                pairs = self.generate_alpaca_pairs(chunk['content'])
                 dataset.extend(pairs)
                 await asyncio.sleep(0.5)
 
@@ -127,6 +127,17 @@ class VMLDistiller:
                     self.update_status("error", 0, f"Handover Failed: {result['error']}")
                 else:
                     self.update_status("complete", 100, f"Mission Accomplished! Published to: {result['url']}")
+                    # Save metadata for future UI retrieval
+                    try:
+                        meta_path = filepath + ".meta"
+                        with open(meta_path, 'w') as mf:
+                            json.dump({
+                                "hf_url": result['url'],
+                                "collection": collection_name,
+                                "timestamp": time.time()
+                            }, mf)
+                    except:
+                        pass
             else:
                 self.update_status("complete", 100, f"Distillation complete. Dataset saved as {filename}")
                 
