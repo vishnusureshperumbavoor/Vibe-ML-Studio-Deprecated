@@ -336,15 +336,15 @@ try:
 except Exception as e:
     print(f"❌ LoRA conversion failed: {{e}}")
 """,
-            f"""# Block 6: Cloud Deployment (HF Auto-Upload)
-print("🚀 Initiating Autonomous HF Uploader...")
+            f"""# Block 6: Cloud Deployment (Unified VML Uploader)
+print("🚀 Initiating Autonomous HF Deployment...")
 import sys
 sys.path.append(os.path.join(os.getcwd(), "server"))
 
 try:
     from hf_uploader import upload_to_hf
+    # Upload the entire adapter folder
     upload_to_hf(r"{output_dir}", "{model_slug}")
-    print("✅ Fine-tuned model successfully synced to Hugging Face!")
 except ImportError:
     print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
 except Exception as e:
@@ -441,13 +441,14 @@ except Exception as e:
     print(f"❌ Quantization failed: {{e}}")
     sys.exit(1)
 """,
-            f"""# Block 5: Cloud Deployment
-print("🚀 Initiating Autonomous HF Uploader...")
+            f"""# Block 5: Unified Cloud Deployment
+print("🚀 Initiating Autonomous HF Deployment...")
 import sys
 sys.path.append(os.path.join(os.getcwd(), "server"))
 try:
     from hf_uploader import upload_to_hf
-    upload_to_hf(output_path, model_id)
+    # Upload the single GGUF file to the same repo
+    upload_to_hf(output_path, "{model_name_clean.lower()}")
 except ImportError:
     print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
 except Exception as e:

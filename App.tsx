@@ -149,6 +149,8 @@ export default function App() {
   const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow' | 'knowledge'>('knowledge');
   const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
+  const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null);
+  const [workflowModelFilename, setWorkflowModelFilename] = useState<string | null>(null);
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [chatSelectedModel, setChatSelectedModel] = useState<string>('');
   const [preSelectedDataset, setPreSelectedDataset] = useState<string | null>(null);
@@ -211,6 +213,8 @@ export default function App() {
 
   const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => {
     setIsWorkflowExecuting(true);
+    setDeploymentUrl(null);
+    setWorkflowModelFilename(null);
     try {
       // 1. Call MCP to get script
       const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
@@ -284,6 +288,12 @@ export default function App() {
           output: result.error || result.text 
         } : c));
 
+        // Parse deployment URL if success signal is present
+        if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
+           const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
+           if (urlMatch) setDeploymentUrl(urlMatch[1]);
+        }
+
         if (result.error && mode === 'agent') {
           let currentError = result.text || result.error;
           let currentCode = blockScript;
@@ -346,7 +356,13 @@ export default function App() {
 
   const handleStartQuantization = async (modelId: string, bits: string) => {
     setIsWorkflowExecuting(true);
+    setDeploymentUrl(null);
+    setWorkflowModelFilename(null);
     try {
+      // For Arena redirect: predict filename
+      const modelNameClean = modelId.split('/').pop()?.toLowerCase();
+      setWorkflowModelFilename(`${modelNameClean}-q${bits}_0.gguf`);
+
       const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -409,6 +425,12 @@ export default function App() {
           status: result.error ? 'error' : 'success', 
           output: result.error || result.text 
         } : c));
+        
+        // Parse deployment URL
+        if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
+           const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
+           if (urlMatch) setDeploymentUrl(urlMatch[1]);
+        }
 
         if (result.error) break; // Stop the sequence if a block fails
       }
@@ -1245,9 +1267,23 @@ export default function App() {
                   systemInfo={systemInfo} 
                   preSelectedDataset={preSelectedDataset}
                   onClearSelection={() => setPreSelectedDataset(null)}
+                  deploymentUrl={deploymentUrl}
+                  onTestInArena={() => {
+                    // This logic is for GGUF usually, but if deployed as adapter we could select it too
+                    // For now, let's assume conversion to GGUF happened or we jump to chat
+                    setActiveView('chat');
+                  }}
                 />
               ) : (
-                <QuantizationPanel onStart={handleStartQuantization} isExecuting={isWorkflowExecuting} />
+                <QuantizationPanel 
+                  onStart={handleStartQuantization} 
+                  isExecuting={isWorkflowExecuting} 
+                  deploymentUrl={deploymentUrl}
+                  onTestInArena={(filename) => {
+                    setChatSelectedModel(filename || workflowModelFilename);
+                    setActiveView('chat');
+                  }}
+                />
               )}
             </div>
           </div>

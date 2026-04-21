@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Activity, Gauge } from 'lucide-react';
+import { Zap, Activity, Gauge, CheckCircle2, ExternalLink } from 'lucide-react';
 import { SmartSelector } from './SmartSelector';
 import { callKimi } from '../services/aiService';
 
@@ -9,6 +9,8 @@ interface FineTuningPanelProps {
   systemInfo?: any;
   preSelectedDataset?: string | null;
   onClearSelection?: () => void;
+  deploymentUrl?: string | null;
+  onTestInArena?: () => void;
 }
 
 export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ 
@@ -16,7 +18,9 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
   isExecuting, 
   systemInfo, 
   preSelectedDataset,
-  onClearSelection
+  onClearSelection,
+  deploymentUrl,
+  onTestInArena
 }) => {
   const [modelId, setModelId] = useState('');
   const [datasetId, setDatasetId] = useState('');
@@ -89,6 +93,43 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Success Modal/Overlay */}
+      {deploymentUrl && (
+        <div className="absolute inset-0 z-50 rounded-[32px] overflow-hidden">
+          <div className="absolute inset-0 bg-[#0B090F]/90 backdrop-blur-xl animate-in fade-in duration-500" />
+          <div className="relative h-full flex flex-col items-center justify-center p-12 text-center space-y-8 animate-in zoom-in-95 slide-in-from-bottom-8 duration-700">
+            <div className="relative">
+              <div className="absolute -inset-4 bg-amber-500/20 blur-2xl rounded-full animate-pulse" />
+              <CheckCircle2 size={64} className="text-amber-500 relative" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-3xl font-black text-white tracking-tight italic uppercase">Mission Accomplished</h3>
+              <p className="text-white/40 text-sm max-w-sm">Your model has been fine-tuned, optimized, and synced to the cloud successfully.</p>
+            </div>
+
+            <div className="flex flex-col w-full gap-3 max-w-xs">
+              <a 
+                href={deploymentUrl} 
+                target="_blank" 
+                rel="noreferrer"
+                className="w-full py-4 bg-white text-black rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all flex items-center justify-center gap-3 shadow-[0_20px_40px_rgba(255,255,255,0.1)] hover:shadow-amber-500/20"
+              >
+                <ExternalLink size={16} />
+                View it on Hugging Face
+              </a>
+              <button 
+                onClick={onTestInArena}
+                className="w-full py-4 bg-amber-500/10 border border-amber-500/30 text-amber-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-500/20 transition-all flex items-center justify-center gap-3"
+              >
+                <Activity size={16} />
+                Test in VML Arena
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {systemInfo && (
         <div className="flex items-center gap-3 px-4 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-full w-fit mx-auto animate-in zoom-in-95 duration-700">
           <Activity size={12} className="text-emerald-500 animate-pulse" />

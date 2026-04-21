@@ -3,67 +3,70 @@ import sys
 from huggingface_hub import HfApi, create_repo, login
 from dotenv import load_dotenv
 
-def upload_to_hf(file_path: str, model_name: str):
+def upload_to_hf(path: str, repo_slug: str):
     """
-    Uploads a quantized model (.gguf) to Hugging Face.
-    Naming convention: {model-name}-gguf-vml
-    Visibility: Public
+    Uploads a file or a folder to Hugging Face.
+    Path: Absolute path to the file or directory.
+    Repo Slug: The base name of the repository to create/update.
     """
-    # Load from current dir or project root
-    if os.path.exists(".env"):
-        load_dotenv(".env")
-    elif os.path.exists("../.env"):
-        load_dotenv("../.env")
-    else:
-        load_dotenv() # Fallback
+    # Load environment variables
+    load_dotenv()
     
     token = os.getenv("HF_TOKEN")
-    
     if not token:
-        print("❌ Error: HF_TOKEN not found in .env file.")
+        print("❌ Error: HF_TOKEN not found. Deployment aborted.")
         return False
 
     api = HfApi(token=token)
     
-    # 1. Get Username
+    # 1. Fetch authenticated user
     try:
         user_info = api.whoami()
         username = user_info['name']
-        print(f"Authenticated as: {username}")
     except Exception as e:
-        print(f"Authentication failed: {e}")
+        print(f"❌ Authentication failed: {e}")
         return False
 
-    # 2. Prepare Repo Details
-    repo_id = f"{username}/{model_name.lower().replace('/', '_')}-gguf-vml"
+    # 2. Prepare Repository
+    # Convention: {username}/{repo_slug}-vml
+    repo_id = f"{username}/{repo_slug}-vml"
     
-    # 3. Create Repo if not exists
+    print(f"🔄 Preparing repository: {repo_id}...")
     try:
         create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True, repo_type="model")
-        print(f"Repository ready: https://huggingface.co/{repo_id}")
     except Exception as e:
-        print(f"Repo creation/check failed: {e}")
+        print(f"⚠️ Repo access issue: {e}")
 
-    # 4. Upload File
-    filename = os.path.basename(file_path)
-    print(f"Uploading {filename} to HF...")
-    
+    # 3. Handle Upload
     try:
-        future = api.upload_file(
-            path_or_fileobj=file_path,
-            path_in_repo=filename,
-            repo_id=repo_id,
-            repo_type="model",
-            commit_message=f"Upload quantized model: {filename}"
-        )
-        print(f"Success! Model available at: https://huggingface.co/{repo_id}/blob/main/{filename}")
+        if os.path.isdir(path):
+            print(f"📂 Uploading entire folder to HF: {os.path.basename(path)}...")
+            api.upload_folder(
+                folder_path=path,
+                repo_id=repo_id,
+                repo_type="model",
+                commit_message=f"Upload model directory: {os.path.basename(path)}"
+            )
+        else:
+            print(f"📄 Uploading single file to HF: {os.path.basename(path)}...")
+            api.upload_file(
+                path_or_fileobj=path,
+                path_in_repo=os.path.basename(path),
+                repo_id=repo_id,
+                repo_type="model",
+                commit_message=f"Upload model file: {os.path.basename(path)}"
+            )
+            
+        final_url = f"https://huggingface.co/{repo_id}"
+        print(f"✅ DEPLOYMENT SUCCESSFUL!")
+        print(f"[VML_DEPLOYMENT_URL] {final_url}")
         return True
     except Exception as e:
-        print(f"Upload failed: {e}")
+        print(f"❌ Upload failed: {e}")
         return False
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python hf_uploader.py <file_path> <model_name>")
+        print("Usage: python hf_uploader.py <path> <repo_slug>")
     else:
         upload_to_hf(sys.argv[1], sys.argv[2])
