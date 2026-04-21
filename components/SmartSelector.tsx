@@ -195,7 +195,7 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
               >
                 <div className="flex items-center justify-between w-full gap-2">
                   <span className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors truncate">
-                    {res.id}
+                    {res.is_local ? res.id.replace('.jsonl', '') : res.id}
                   </span>
                   <div className="flex items-center gap-1.5 flex-none text-[10px] font-bold">
                     {res.is_local && (

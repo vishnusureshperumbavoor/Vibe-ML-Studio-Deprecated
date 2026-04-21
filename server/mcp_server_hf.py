@@ -88,7 +88,7 @@ async def handle_list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="fetch_gguf",
-            description="Download a GGUF model file from the Hugging Face Hub directly into the VML models directory.",
+            description="Download a GGUF model file from the Hugging Face Hub directly into the VML models/gguf directory.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -207,8 +207,8 @@ async def handle_call_tool(
         dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
         model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
         
-        # Unified path: Save directly into the server/models folder for Chat Engine discovery
-        output_dir = os.path.join(os.getcwd(), "server", "models", model_slug)
+        # Unified path: Nesting in server/models/adapters
+        output_dir = os.path.join(os.getcwd(), "server", "models", "adapters", model_slug)
         
         # Split into logical blocks for the notebook
         blocks = [
@@ -284,7 +284,7 @@ class VMLReportingCallback(transformers.TrainerCallback):
             print(f"[VML_DATA] {{json.dumps(logs)}}")
 
 sft_config = SFTConfig(
-    output_dir="{output_dir}",
+    output_dir=r"{output_dir}",
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
@@ -343,7 +343,7 @@ sys.path.append(os.path.join(os.getcwd(), "server"))
 
 try:
     from hf_uploader import upload_to_hf
-    upload_to_hf("{output_dir}", "{model_slug}")
+    upload_to_hf(r"{output_dir}", "{model_slug}")
     print("✅ Fine-tuned model successfully synced to Hugging Face!")
 except ImportError:
     print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
@@ -372,9 +372,10 @@ import subprocess
 model_id = "{model_id}"
 bits = "{bits}"
 target_filename = "{target_filename}"
-models_dir = os.path.join(os.getcwd(), "server", "models")
-base_models_dir = os.path.join(models_dir, "base_models")
-os.makedirs(models_dir, exist_ok=True)
+# VML-Standard Structure (Nested)
+gguf_dir = os.path.join(os.getcwd(), "server", "models", "gguf")
+base_models_dir = os.path.join(os.getcwd(), "server", "models", "base_models")
+os.makedirs(gguf_dir, exist_ok=True)
 os.makedirs(base_models_dir, exist_ok=True)
 
 print(f"🛠️ Starting VML Quantization Pipeline: {{model_id}} -> {{bits}}-bit GGUF")
@@ -425,7 +426,7 @@ fetch_tool("HF-to-GGUF Converter", "https://raw.githubusercontent.com/ggerganov/
 fetch_tool("LoRA-to-GGUF Converter", "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_lora_to_gguf.py", lora_converter_script)
 """,
             f"""# Block 4: GGUF Model Conversion
-output_path = os.path.join(models_dir, target_filename)
+output_path = os.path.join(gguf_dir, target_filename)
 print(f"🔄 Converting weights to {{bits}}-bit GGUF...")
 
 try:
@@ -463,15 +464,16 @@ print("🏁 VML Quantization Pipeline Complete.")
         repo_id = arguments.get("repo_id")
         filename = arguments.get("filename")
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        models_dir = os.path.join(base_dir, "models")
-        if not os.path.exists(models_dir):
-            os.makedirs(models_dir)
+        # Update point: Downloads now go to server/models/gguf
+        target_dir = os.path.join(base_dir, "models", "gguf")
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
             
         try:
             path = hf_hub_download(
                 repo_id=repo_id, 
                 filename=filename, 
-                local_dir=models_dir,
+                local_dir=target_dir,
                 token=hf_token
             )
             return [types.TextContent(type="text", text=f"✅ Model downloaded successfully to: {path}")]

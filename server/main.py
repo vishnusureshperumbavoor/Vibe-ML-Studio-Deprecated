@@ -24,12 +24,18 @@ app = FastAPI(title="Vibe Training Execution Engine")
 # Base directory for skills and file access (Project Root)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__)) # Directory of main.py (server/)
 PROJECT_ROOT = os.path.dirname(BASE_DIR)              # One level up (Vibe-ML-platform/)
-MODELS_DIR = os.path.join(BASE_DIR, "models")         # server/models/
+
+# VML-Standard Directory Structure
+MODELS_PARENT = os.path.join(BASE_DIR, "models")
+MODELS_DIR = os.path.join(MODELS_PARENT, "base_models") # HF Base Models
+GGUF_DIR = os.path.join(MODELS_PARENT, "gguf")          # Quantized Models
+ADAPTERS_DIR = os.path.join(MODELS_PARENT, "adapters")  # Fine-tuned Adapters
+DATASETS_DIR = os.path.join(BASE_DIR, "data", "datasets") 
 
 # Ensure necessary directories exist
-for d in [MODELS_DIR]:
+for d in [MODELS_PARENT, MODELS_DIR, GGUF_DIR, ADAPTERS_DIR, DATASETS_DIR]:
     if not os.path.exists(d):
-        os.makedirs(d)
+        os.makedirs(d, exist_ok=True)
 
 # Allow the React frontend to communicate with this backend
 app.add_middleware(
@@ -236,8 +242,8 @@ async def native_chat(req: NativeChatRequest):
             # 1. Resolve LoRA path if provided
             lora_path = None
             if req.lora_slug:
-                # Adapters are stored in server/data/<slug>
-                abs_lora_dir = os.path.join(MODELS_DIR, req.lora_slug)
+                # Adapters are stored in server/models/adapters/<slug>
+                abs_lora_dir = os.path.join(ADAPTERS_DIR, req.lora_slug)
                 if os.path.exists(abs_lora_dir):
                     lora_path = abs_lora_dir
             
@@ -267,19 +273,18 @@ async def list_native_models():
     Returns a unified list of available native models.
     Includes base GGUFs and detected Fine-tuned adapters.
     """
-    models_dir = os.path.join(BASE_DIR, "models")
     results = []
     
-    # 1. Base Models (.gguf)
-    if os.path.exists(models_dir):
-        for f in os.listdir(models_dir):
+    # 1. Base Models (.gguf) in server/models/gguf
+    if os.path.exists(GGUF_DIR):
+        for f in os.listdir(GGUF_DIR):
             if f.lower().endswith(".gguf"):
                 results.append({"name": f, "source": "native", "type": "base"})
     
-    # 2. Fine-tuned Adapters (Folders in /data with safetensors)
-    if os.path.exists(MODELS_DIR):
-        for slug in os.listdir(MODELS_DIR):
-            lora_dir = os.path.join(MODELS_DIR, slug)
+    # 2. Fine-tuned Adapters in server/models/adapters
+    if os.path.exists(ADAPTERS_DIR):
+        for slug in os.listdir(ADAPTERS_DIR):
+            lora_dir = os.path.join(ADAPTERS_DIR, slug)
             if os.path.isdir(lora_dir):
                 # Check for adapter weights
                 if os.path.exists(os.path.join(lora_dir, "adapter_model.safetensors")):
@@ -393,25 +398,24 @@ async def reset_distill():
 @app.get("/list_local_datasets")
 async def list_local_datasets():
     """Scans server/data/datasets for .jsonl files and returns them as searchable items."""
-    dataset_dir = os.path.join(BASE_DIR, "data", "datasets")
     results = []
-    if not os.path.exists(dataset_dir):
+    if not os.path.exists(DATASETS_DIR):
         return {"datasets": []}
         
-    for f in os.listdir(dataset_dir):
+    for f in os.listdir(DATASETS_DIR):
         if f.endswith(".jsonl"):
             # example: collection_distilled_12345.jsonl -> collection
             display_name = f.split("_distilled_")[0]
             
             # Check file size
             try:
-                size_kb = os.path.getsize(os.path.join(dataset_dir, f)) // 1024
+                size_kb = os.path.getsize(os.path.join(DATASETS_DIR, f)) // 1024
             except:
                 size_kb = 0
                 
             # Check for metadata (HF URL)
             hf_url = None
-            meta_path = os.path.join(dataset_dir, f + ".meta")
+            meta_path = os.path.join(DATASETS_DIR, f + ".meta")
             if os.path.exists(meta_path):
                 try:
                     with open(meta_path, 'r') as mf:

@@ -116,4 +116,4 @@ class NativeInferenceManager:
 
 # Singleton instance
 base_dir = os.path.dirname(os.path.abspath(__file__))
-native_manager = NativeInferenceManager(os.path.join(base_dir, "models"))
+native_manager = NativeInferenceManager(os.path.join(base_dir, "models", "gguf"))
