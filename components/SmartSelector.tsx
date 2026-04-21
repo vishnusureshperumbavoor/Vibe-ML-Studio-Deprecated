@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronDown, Check, Loader2, Cpu, Lock, Star, Download } from 'lucide-react';
+import { Search, ChevronDown, Check, Loader2, Cpu, Lock, Star, Download, Database } from 'lucide-react';
 
 interface ModelResult {
   id: string;
@@ -7,6 +7,8 @@ interface ModelResult {
   likes: number;
   gated: boolean;
   is_cpu_ready: boolean;
+  is_local?: boolean;
+  size_kb?: number;
 }
 
 interface SmartSelectorProps {
@@ -20,9 +22,26 @@ interface SmartSelectorProps {
 export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, placeholder, defaultValue, suggestions }) => {
   const [query, setQuery] = useState(defaultValue || '');
   const [results, setResults] = useState<any[]>([]);
+  const [localData, setLocalData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch local data on mount for fast search
+  useEffect(() => {
+    if (type === 'dataset') {
+      const fetchLocal = async () => {
+        try {
+          const resp = await fetch("http://127.0.0.1:2000/list_local_datasets");
+          const data = await resp.json();
+          setLocalData(data.datasets || []);
+        } catch (e) {
+          console.error("Local fetch failed:", e);
+        }
+      };
+      fetchLocal();
+    }
+  }, [type]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -40,8 +59,17 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
   const search = async (q: string) => {
     if (!q || q.length < 2) return;
     setIsLoading(true);
-    // Removed setIsOpen(true) from here to prevent auto-reopening on selection
+    
     try {
+      // 1. Search Local First
+      const localMatches = type === 'dataset' 
+        ? localData.filter(d => 
+            d.id.toLowerCase().includes(q.toLowerCase()) || 
+            d.display_name.toLowerCase().includes(q.toLowerCase())
+          ).map(d => ({...d, is_local: true}))
+        : [];
+
+      // 2. Search Remote via MCP
       const toolName = type === 'model' ? 'model_search' : 'dataset_search';
       const mcpUrl = "http://127.0.0.1:1001/mcp/call"; 
       
@@ -57,19 +85,18 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
       const payload = await resp.json();
       const content = payload.result || payload; 
       
+      let remoteResults: any[] = [];
       if (content && content[0] && content[0].text) {
         let text = content[0].text;
         
         if (text.includes("[JSON_RESULTS]")) {
           const jsonStr = text.split("[JSON_RESULTS]")[1].trim();
-          const parsed = JSON.parse(jsonStr);
-          setResults(parsed);
+          remoteResults = JSON.parse(jsonStr);
         } else {
           const regex = /-\s+\*\*(.*?)\*\*\s+\(Downloads:\s+(.*?)\)/g;
-          const parsed: any[] = [];
           let m;
           while ((m = regex.exec(text)) !== null) {
-            parsed.push({
+            remoteResults.push({
               id: m[1],
               downloads: parseInt(m[2].replace(/,/g, '')),
               likes: 0,
@@ -77,15 +104,32 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
               is_cpu_ready: m[1].toLowerCase().includes('0.5b') || m[1].toLowerCase().includes('360m')
             });
           }
-          setResults(parsed);
         }
       }
+
+      // Merge and unique-ify (prefer local if ID matches)
+      const combined = [...localMatches];
+      remoteResults.forEach(rem => {
+        if (!combined.some(loc => loc.id === rem.id)) {
+          combined.push(rem);
+        }
+      });
+      
+      setResults(combined);
     } catch (e) {
       console.error("Search failed:", e);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Update query if defaultValue changes externally
+  useEffect(() => {
+    if (defaultValue) {
+        setQuery(defaultValue);
+        skipSearchRef.current = true;
+    }
+  }, [defaultValue]);
 
   // Debounce search
   useEffect(() => {
@@ -99,8 +143,12 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
     return () => clearTimeout(timer);
   }, [query]);
 
-  const displayResults = query.length < 2 ? (suggestions || []) : results;
-  const isShowingSuggestions = query.length < 2 && (suggestions?.length || 0) > 0;
+  // Merge suggestions with any local matches
+  const displayResults = query.length < 2 
+    ? [...(localData.map(d => ({...d, is_local: true}))), ...(suggestions || [])].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i)
+    : results;
+    
+  const isShowingSuggestions = query.length < 2;
 
   return (
     <div className="relative w-full" ref={containerRef}>
@@ -150,6 +198,11 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
                     {res.id}
                   </span>
                   <div className="flex items-center gap-1.5 flex-none text-[10px] font-bold">
+                    {res.is_local && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                        <Database size={10} /> LOCAL
+                      </span>
+                    )}
                     {res.is_cpu_ready && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         <Cpu size={10} /> CPU READY
@@ -163,17 +216,25 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-4 mt-2 text-[10px] text-white/40">
-                  <span className="flex items-center gap-1">
-                    <Download size={10} /> {res.downloads.toLocaleString()}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Star size={10} /> {res.likes.toLocaleString()}
-                  </span>
+                <div className="flex items-center gap-4 mt-2 text-[10px] text-white/40 font-medium">
+                  {res.is_local ? (
+                    <span className="flex items-center gap-1 text-emerald-400/60 uppercase">
+                      Local Dataset • {res.size_kb ? (res.size_kb > 1024 ? `${(res.size_kb/1024).toFixed(1)} MB` : `${res.size_kb} KB`) : '0 KB'}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <Download size={10} /> {res.downloads.toLocaleString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Star size={10} /> {res.likes.toLocaleString()}
+                      </span>
+                    </>
+                  )}
                 </div>
               </button>
             ))}
-            {!isLoading && results.length === 0 && (
+            {!isLoading && results.length === 0 && query.length >= 2 && (
               <div className="p-4 text-center text-xs text-white/20 italic">
                 No matching {type}s found.
               </div>

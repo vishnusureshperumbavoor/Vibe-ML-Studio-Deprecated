@@ -1,8 +1,30 @@
 import os
 import json
 
-dataset_dir = "d:/Projects/VML-Studio/server/data/datasets"
-username = "vishnusureshperumbavoor"
+# Calculate dataset_dir dynamically relative to this script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+dataset_dir = os.path.join(BASE_DIR, "data", "datasets")
+
+# Get username dynamically from HF API
+from huggingface_hub import HfApi
+from dotenv import load_dotenv
+
+# Try loading env from multiple locations
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(BASE_DIR), ".env"))
+
+token = os.getenv("HF_TOKEN")
+if not token:
+    print("Error: HF_TOKEN not found in .env")
+    exit(1)
+
+try:
+    api = HfApi(token=token)
+    username = api.whoami()['name']
+    print(f"Detected HF User: {username}")
+except Exception as e:
+    print(f"HF Auth failed: {e}")
+    exit(1)
 
 if os.path.exists(dataset_dir):
     for f in os.listdir(dataset_dir):

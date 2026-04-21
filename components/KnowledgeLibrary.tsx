@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from './Button';
 
-export const KnowledgeLibrary: React.FC = () => {
+export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => void }> = ({ onDistillComplete }) => {
   const [collections, setCollections] = useState<any[]>([]);
   const [totalStorage, setTotalStorage] = useState<number>(0);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
@@ -135,11 +135,16 @@ export const KnowledgeLibrary: React.FC = () => {
             clearInterval(interval);
             fetchLocalDatasets(); // RE-FETCH on completion
             
-            // AUTOMATIC REDIRECT: If a URL is found in the complete status, teleport the user
-            if (data.step === 'complete' && data.current_task.includes('http')) {
-              const url = data.current_task.split('Published to: ')[1] || data.current_task.split('Deployed! ')[1];
-              if (url) {
-                window.open(url, '_blank');
+            // AUTOMATIC REDIRECT: Trigger handoff to Build tab
+            if (data.step === 'complete' && onDistillComplete) {
+              const filename = data.current_task.split('Dataset ready: ')[1] || 
+                               data.current_task.split('Mission Accomplished! Published to: ')[1]?.split('/').pop() + '.jsonl';
+              
+              if (filename && onDistillComplete) {
+                // Short delay to let the user see the "Complete" state
+                setTimeout(() => {
+                   onDistillComplete(filename);
+                }, 1500);
               }
             }
           }

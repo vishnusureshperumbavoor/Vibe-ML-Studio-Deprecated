@@ -7,9 +7,17 @@ interface FineTuningPanelProps {
   onStart: (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => void;
   isExecuting: boolean;
   systemInfo?: any;
+  preSelectedDataset?: string | null;
+  onClearSelection?: () => void;
 }
 
-export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ onStart, isExecuting, systemInfo }) => {
+export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ 
+  onStart, 
+  isExecuting, 
+  systemInfo, 
+  preSelectedDataset,
+  onClearSelection
+}) => {
   const [modelId, setModelId] = useState('');
   const [datasetId, setDatasetId] = useState('');
   const [hardware, setHardware] = useState('CPU');
@@ -17,6 +25,14 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ onStart, isExe
   const [rank, setRank] = useState(16);
   const [forecast, setForecast] = useState<string | null>(null);
   const [isForecasting, setIsForecasting] = useState(false);
+
+  useEffect(() => {
+    if (preSelectedDataset) {
+      setDatasetId(preSelectedDataset);
+      // Clean up the pre-selection so subsequent mounts don't force it
+      if (onClearSelection) onClearSelection();
+    }
+  }, [preSelectedDataset]);
 
   useEffect(() => {
     if (modelId && datasetId) {

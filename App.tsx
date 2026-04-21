@@ -151,6 +151,7 @@ export default function App() {
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [chatSelectedModel, setChatSelectedModel] = useState<string>('');
+  const [preSelectedDataset, setPreSelectedDataset] = useState<string | null>(null);
   const [wasCopyAllClicked, setWasCopyAllClicked] = useState(false);
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
@@ -1221,7 +1222,10 @@ export default function App() {
             onModelChange={setChatSelectedModel}
           />
         ) : activeView === 'knowledge' ? (
-          <KnowledgeLibrary />
+          <KnowledgeLibrary onDistillComplete={(id) => {
+            setPreSelectedDataset(id);
+            setActiveView('workflow');
+          }} />
         ) : activeView === 'workflow' ? (
           <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">
             <div className="text-center space-y-4 max-w-2xl">
@@ -1235,7 +1239,13 @@ export default function App() {
               <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
               
               {workflowMode === 'finetune' ? (
-                <FineTuningPanel onStart={handleStartSFT} isExecuting={isWorkflowExecuting} systemInfo={systemInfo} />
+                <FineTuningPanel 
+                  onStart={handleStartSFT} 
+                  isExecuting={isWorkflowExecuting} 
+                  systemInfo={systemInfo} 
+                  preSelectedDataset={preSelectedDataset}
+                  onClearSelection={() => setPreSelectedDataset(null)}
+                />
               ) : (
                 <QuantizationPanel onStart={handleStartQuantization} isExecuting={isWorkflowExecuting} />
               )}
