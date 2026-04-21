@@ -1117,7 +1117,7 @@ export default function App() {
                   Auto-Pilot Active
                 </span>
               ) : (
-                "Your helpful agent for fine tuning and quantization"
+                "Your Personal Research Agents"
               )}
             </span>
           </div>

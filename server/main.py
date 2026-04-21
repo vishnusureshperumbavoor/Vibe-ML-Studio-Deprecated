@@ -11,9 +11,12 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from inference import native_manager
 from typing import List, Optional
+from distillation_service import distiller
+from dataset_uploader import upload_dataset_to_hf
 
-# Load HF_TOKEN from server/.env
-load_dotenv()
+# Load HF_TOKEN from server/.env or project root
+load_dotenv() # Check server/
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")) # Check project root
 
 # Create the FastAPI App
 app = FastAPI(title="Vibe Training Execution Engine")
@@ -330,6 +333,62 @@ async def save_token(payload: dict = Body(...)):
         return {"success": True, "message": f"{token_key} saved and active."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Distillation & HF Deployment Endpoints ---
+
+class DistillRequest(BaseModel):
+    collection_name: str
+    dataset_name: Optional[str] = None
+    auto_deploy: bool = False
+
+@app.post("/distill/start")
+async def start_distillation(req: DistillRequest):
+    """Triggers the distillation process in a background task."""
+    if distiller.status["step"] != "idle" and distiller.status["step"] != "complete":
+        raise HTTPException(status_code=400, detail="A distillation task is already running.")
+    
+    # We run it in the background with the autonomous flag
+    asyncio.create_task(distiller.distill_collection(req.collection_name, auto_deploy=req.auto_deploy))
+    return {"status": "started", "collection": req.collection_name, "auto_deploy": req.auto_deploy}
+
+@app.get("/distill/status")
+async def get_distill_status():
+    """Polls the current status of the distillation agent."""
+    return distiller.status
+
+@app.post("/distill/deploy")
+async def deploy_dataset(req: DistillRequest):
+    """Uploads the most recent distilled dataset for a collection to Hugging Face."""
+    # Find the latest file for this collection
+    dataset_dir = os.path.join(BASE_DIR, "data", "datasets")
+    if not os.path.exists(dataset_dir):
+        raise HTTPException(status_code=404, detail="No datasets found.")
+        
+    files = [f for f in os.listdir(dataset_dir) if f.startswith(req.collection_name) and f.endswith(".jsonl")]
+    if not files:
+        raise HTTPException(status_code=404, detail="No distilled dataset found for this collection.")
+        
+    latest_file = sorted(files)[-1]
+    file_path = os.path.join(dataset_dir, latest_file)
+    
+    distiller.update_status("deploying", 95, "Uploading to Hugging Face...")
+    
+    # Run upload
+    result = upload_dataset_to_hf(file_path, req.dataset_name or req.collection_name, req.collection_name)
+    
+    if "error" in result:
+        distiller.update_status("error", 0, result["error"])
+        raise HTTPException(status_code=500, detail=result["error"])
+        
+    distiller.update_status("complete", 100, f"Deployed! {result['url']}")
+    return result
+
+@app.post("/distill/reset")
+async def reset_distill():
+    """Resets the distiller status to idle."""
+    distiller.status = {"step": "idle", "progress": 0, "current_task": ""}
+    return {"status": "reset"}
 
 
 if __name__ == "__main__":

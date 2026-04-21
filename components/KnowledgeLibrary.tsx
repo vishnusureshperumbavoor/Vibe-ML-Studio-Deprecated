@@ -9,7 +9,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Copy,
-  Trash2
+  Trash2,
+  Sparkles,
+  Share2,
+  ExternalLink,
+  Activity
 } from 'lucide-react';
 import { Button } from './Button';
 
@@ -30,6 +34,8 @@ export const KnowledgeLibrary: React.FC = () => {
 
   const [isMining, setIsMining] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [distillStatus, setDistillStatus] = useState<any>({ step: 'idle', progress: 0, current_task: '' });
+  const [showDistillUI, setShowDistillUI] = useState(false);
   const [miningStep, setMiningStep] = useState<number>(0);
   const [statusMsg, setStatusMsg] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [sourceHistory, setSourceHistory] = useState<string[]>([]);
@@ -102,6 +108,64 @@ export const KnowledgeLibrary: React.FC = () => {
 
     fetchExplorerData();
   }, [selectedCollection]);
+
+  // Distillation Status Polling
+  useEffect(() => {
+    let interval: any;
+    if (distillStatus.step !== 'idle' && distillStatus.step !== 'complete' && distillStatus.step !== 'error') {
+      interval = setInterval(async () => {
+        try {
+          const resp = await fetch("http://127.0.0.1:2000/distill/status");
+          const data = await resp.json();
+          setDistillStatus(data);
+          if (data.step === 'complete' || data.step === 'error') {
+            clearInterval(interval);
+          }
+        } catch (e) {
+          console.error("Status poll failed", e);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [distillStatus.step]);
+
+  const handleStartDistillation = async (isAgentic: boolean = false) => {
+    if (!selectedCollection) return;
+    setDistillStatus({ 
+      step: 'init', 
+      progress: 5, 
+      current_task: isAgentic ? 'Initiating Autonomous Agent Mission...' : 'Starting manual distillation...' 
+    });
+    setShowDistillUI(true);
+    try {
+      await fetch("http://127.0.0.1:2000/distill/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          collection_name: selectedCollection,
+          auto_deploy: isAgentic
+        })
+      });
+    } catch (e) {
+       setDistillStatus({ step: 'error', progress: 0, current_task: 'Failed to contact Agent.' });
+    }
+  };
+
+  const handleDeployToHF = async () => {
+    if (!selectedCollection) return;
+    setDistillStatus(prev => ({ ...prev, step: 'deploying', progress: 95, current_task: 'Initiating HF Handshake...' }));
+    try {
+      const resp = await fetch("http://127.0.0.1:2000/distill/deploy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collection_name: selectedCollection })
+      });
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+    } catch (e) {
+      setDistillStatus({ step: 'error', progress: 0, current_task: (e as Error).message });
+    }
+  };
 
 
   const handleIngest = async () => {
@@ -484,16 +548,97 @@ export const KnowledgeLibrary: React.FC = () => {
                   </div>
                   
                   {collectionData.length > 0 && !isExploring && (
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => handleCopyBlock(collectionData.map(b => b.content).join('\n\n'), 'all')}
-                      className="text-xs text-purple-400 hover:bg-purple-500/10 flex items-center gap-2"
-                    >
-                      {copiedId === 'all' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-                      {copiedId === 'all' ? 'Copied All!' : 'Copy Collection'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                       <Button 
+                        variant="ghost" 
+                        onClick={() => handleStartDistillation(true)}
+                        className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group"
+                      >
+                        <Sparkles size={12} className="group-hover:animate-pulse" />
+                        Distill to Dataset
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        onClick={() => handleCopyBlock(collectionData.map(b => b.content).join('\n\n'), 'all')}
+                        className="text-xs text-purple-400 hover:bg-purple-500/10 flex items-center gap-2"
+                      >
+                        {copiedId === 'all' ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                        {copiedId === 'all' ? 'Copied All!' : 'Copy Collection'}
+                      </Button>
+                    </div>
                   )}
                 </div>
+
+                {/* Distillation Progress UI */}
+                {showDistillUI && (
+                  <div className={`p-6 rounded-2xl border space-y-4 animate-in slide-in-from-top-4 duration-500 ${
+                    distillStatus.step === 'error' ? 'bg-rose-500/5 border-rose-500/20' : 
+                    distillStatus.progress > 80 ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-indigo-500/5 border-indigo-500/20'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                          <Activity className={`${distillStatus.step !== 'complete' && distillStatus.step !== 'deploying' ? 'text-indigo-400 animate-pulse' : 'hidden'}`} size={18} />
+                          <Share2 className={`${distillStatus.step === 'deploying' ? 'text-emerald-400 animate-bounce' : 'hidden'}`} size={18} />
+                          <CheckCircle2 className={`${distillStatus.step === 'complete' ? 'text-emerald-400' : 'hidden'}`} size={18} />
+                          <h4 className={`text-sm font-bold ${distillStatus.step === 'deploying' || distillStatus.step === 'complete' ? 'text-emerald-200' : 'text-indigo-200'}`}>
+                            {distillStatus.step === 'deploying' ? 'Autonomous Deployment Agent' : 
+                             distillStatus.step === 'complete' ? 'Mission Accomplished' : 'Distillation Engine'}
+                          </h4>
+                       </div>
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="h-6 text-[10px] text-gray-500 hover:text-white"
+                         onClick={() => setShowDistillUI(false)}
+                       >
+                         Dismiss
+                       </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                       <div className="flex justify-between text-[10px] font-mono text-indigo-400/80">
+                          <span>{distillStatus.current_task}</span>
+                          <span>{distillStatus.progress}%</span>
+                       </div>
+                       <div className="h-1.5 w-full bg-indigo-950 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-indigo-500 transition-all duration-1000 ease-out" 
+                            style={{ width: `${distillStatus.progress}%` }}
+                          />
+                       </div>
+                    </div>
+
+                    {distillStatus.step === 'complete' && !distillStatus.current_task.includes('http') && (
+                       <div className="flex items-center justify-between pt-2">
+                          <div className="text-xs text-emerald-400 flex items-center gap-2">
+                             <CheckCircle2 size={14} />
+                             Knowledge Distilled Successfully.
+                          </div>
+                       </div>
+                    )}
+
+                    {distillStatus.step === 'complete' && distillStatus.current_task.includes('http') && (
+                      <div className="pt-4 border-t border-indigo-500/10">
+                         <a 
+                           href={distillStatus.current_task.split('Deployed! ')[1]} 
+                           target="_blank" 
+                           rel="noreferrer"
+                           className="flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-500/10 text-emerald-400 text-sm hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
+                         >
+                            <ExternalLink size={16} />
+                            View on Hugging Face
+                         </a>
+                      </div>
+                    )}
+
+                    {distillStatus.step === 'error' && (
+                       <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                          <AlertCircle size={14} />
+                          {distillStatus.current_task}
+                       </div>
+                    )}
+                  </div>
+                )}
                 
                 {isExploring ? (
                   <div className="p-12 text-center rounded-2xl bg-[#0B090F]/50 border border-dashed border-purple-500/10 flex flex-col items-center justify-center gap-3">

@@ -33,6 +33,7 @@ dist-ssr
 server/venv/
 server/models/
 server/data/vectors/
+server/data/datasets/
 server/.cache/
 **/*.gguf
 **/*.safetensors
