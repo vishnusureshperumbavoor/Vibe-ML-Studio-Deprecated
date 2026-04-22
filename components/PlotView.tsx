@@ -156,7 +156,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
                  'Training Complete'}
               </h4>
               <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">
-                {deployState === 'deploying' ? 'Ollama Handover Progress' : 
+                {deployState === 'deploying' ? 'Local Inference Handover' : 
                  deployState === 'error' ? deployMessage :
                  'Efficiency & Hardware Throughput Summary'}
               </p>

@@ -329,7 +329,7 @@ sft_config = SFTConfig(
     learning_rate=2e-4,
     num_train_epochs={epochs},
     logging_steps=1,
-    max_steps=3,
+    max_steps=20,
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",
@@ -356,38 +356,54 @@ print(f"Saving fine-tuned adapters to {{output_dir}}...")
 trainer.save_model(output_dir)
 print("✅ Local weights stored successfully.")
 """,
-            f"""# Block 5.5: LoRA-to-GGUF Conversion (for Arena Chat)
-import sys
-import os
-import subprocess
+            f"""# Block 5.1: GGUF Engine Provisioning
+vml_script_path = os.path.join(output_dir, "vml_converter_engine.py")
+vml_code = r'''
+import os, json, torch, gguf, sys
+from safetensors.torch import load_file
 
-tools_cache = os.path.join(os.getcwd(), "server", ".cache", "vml-tools")
-lora_converter = os.path.join(tools_cache, "convert_lora_to_gguf.py")
-adapter_gguf = os.path.join(output_dir, "adapter.gguf")
+def convert(adapter_path, output_path):
+    print(f"🚀 VML Native Engine: Starting conversion...")
+    with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f: cfg = json.load(f)
+    w_path = os.path.join(adapter_path, "adapter_model.safetensors")
+    weights = load_file(w_path) if os.path.exists(w_path) else torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location="cpu")
+    writer = gguf.GGUFWriter(output_path, "llama")
+    writer.add_string("general.type", "adapter")
+    writer.add_string("adapter.type", "lora")
+    writer.add_float32("adapter.lora.alpha", float(cfg.get("lora_alpha", 16.0)))
+    vml_map = {{"q_proj": "attn_q", "k_proj": "attn_k", "v_proj": "attn_v", "o_proj": "attn_output", "gate_proj": "ffn_gate", "up_proj": "ffn_up", "down_proj": "ffn_down"}}
+    for k, v in weights.items():
+        if "lora_" not in k: continue
+        parts = k.split(".")
+        if "layers" not in parts: continue
+        layer_idx = parts[parts.index("layers") + 1]
+        target = parts[parts.index("layers") + 3]
+        lora_part = "lora_a" if "lora_A" in k else "lora_b"
+        gguf_name = f"blk.{{layer_idx}}.{{vml_map.get(target, target)}}.weight.{{lora_part}}"
+        writer.add_tensor(gguf_name, v.numpy())
+    writer.write_header_to_file()
+    writer.write_kv_data_to_file()
+    writer.write_tensors_to_file()
+    writer.close()
+    print("✅ GGUF Adapter generated.")
 
-print("🔄 Converting LoRA adapters to GGUF format for VML Arena...")
-try:
-    # We call the llama.cpp lora converter on the adapter directory
-    subprocess.run([
-        sys.executable, lora_converter, 
-        output_dir, 
-        "--outfile", adapter_gguf
-    ], check=True)
-    print(f"✅ LoRA GGUF ready at: {{adapter_gguf}}")
-except Exception as e:
-    print(f"❌ LoRA conversion failed: {{e}}")
+if __name__ == "__main__":
+    convert(sys.argv[1], sys.argv[2])
+'''
+open(vml_script_path, "w", encoding="utf-8").write(vml_code)
+print(f"Converter engine provisioned at: {{vml_script_path}}")
+""",
+            f"""# Block 5.2: Isolated GGUF Conversion
+import sys, subprocess
+vml_out = os.path.join(output_dir, "adapter.gguf")
+vml_script = os.path.join(output_dir, "vml_converter_engine.py")
+print("--- Launching Isolated Conversion ---")
+subprocess.run([sys.executable, vml_script, output_dir, vml_out], check=True)
 """,
             f"""# Block 6: VML Agentic Handoff
-print("🏁 SFT Phase Complete. Sending handoff signal to Orchestrator...")
 import json
-handoff_data = {{
-    "vml_type": "HANDOFF_SFT_COMPLETE",
-    "adapter_dir": output_dir,
-    "model_slug": "{model_slug}",
-    "base_model": "{base_model}",
-    "dataset_id": "{dataset_id}"
-}}
-print(f"[VML_HANDOFF] {{json.dumps(handoff_data)}}")
+vml_handoff = {{"vml_type": "HANDOFF_SFT_COMPLETE", "adapter_dir": output_dir, "model_slug": "{model_slug}", "base_model": "{base_model}", "dataset_id": "{dataset_id}"}}
+print(f"[VML_HANDOFF] {{json.dumps(vml_handoff)}}")
 """
         ]
         
