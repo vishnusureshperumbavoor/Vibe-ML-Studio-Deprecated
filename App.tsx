@@ -3,7 +3,6 @@ import {
   Plus,
   Sparkles,
   Send,
-  Trash2,
   StopCircle,
   Zap,
   Map,
@@ -15,8 +14,6 @@ import {
   CheckCircle2,
   Copy,
   Database,
-  Search,
-  BookOpen
 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 import { Cell } from "./components/Cell";
@@ -211,6 +208,43 @@ export default function App() {
     fetchSystemInfo();
   }, []);
 
+  const handleStartDeployment = async (path: string, slug: string, baseModel: string = "Unknown", datasetId: string = "Unknown") => {
+    try {
+      const cellId = uuidv4();
+      const code = `import sys
+import os
+sys.path.append(os.path.join(os.getcwd(), "server"))
+from hf_uploader import upload_to_hf
+upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
+
+      setCells(prev => [...prev, { 
+        id: cellId, 
+        type: 'code', 
+        content: code, 
+        status: 'running' 
+      }]);
+
+      const result = await executeCode(
+        code,
+        (partial) => { setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c)); },
+        () => {}
+      );
+
+      setCells(prev => prev.map(c => c.id === cellId ? { 
+        ...c, 
+        status: result.error ? 'error' : 'success', 
+        output: result.error || result.text 
+      } : c));
+
+      if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
+        const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
+        if (urlMatch) setDeploymentUrl(urlMatch[1]);
+      }
+    } catch (e) {
+      console.error("Auto-Deployment Failed:", e);
+    }
+  };
+
   const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => {
     setIsWorkflowExecuting(true);
     setDeploymentUrl(null);
@@ -288,7 +322,31 @@ export default function App() {
           output: result.error || result.text 
         } : c));
 
-        // Parse deployment URL if success signal is present
+        // ORCHESTRATION: Detect Agentic Handoff Signals
+        if (result.text && result.text.includes("[VML_HANDOFF]")) {
+           try {
+             // Extract JSON from signal
+             const jsonStr = result.text.split("[VML_HANDOFF]")[1].trim().split('\n')[0];
+             const handoff = JSON.parse(jsonStr);
+             
+             if (handoff.vml_type === "HANDOFF_SFT_COMPLETE") {
+                console.log("🚀 VML Orchestrator: SFT Complete. Automated parallel tasks (Deployment/Quantization) are currently DISABLED for testing.");
+                /* 
+                // 1. Trigger Async Deployment (Parallel) with README metadata
+                handleStartDeployment(handoff.adapter_dir, handoff.model_slug, handoff.base_model, handoff.dataset_id);
+                
+                // 2. Trigger Sequential Quantization
+                setTimeout(() => {
+                  handleStartQuantization(handoff.base_model, "4"); 
+                }, 1000);
+                */
+             }
+           } catch (e) {
+             console.error("Orchestration signal parsing failed:", e);
+           }
+        }
+
+        // Parse deployment URL if success signal is present (legacy support for single scripts)
         if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
            const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
            if (urlMatch) setDeploymentUrl(urlMatch[1]);
@@ -1140,7 +1198,7 @@ export default function App() {
                   Auto-Pilot Active
                 </span>
               ) : (
-                "Your Personal Research Agents"
+                "Your Personal AI R&D Agents"
               )}
             </span>
           </div>

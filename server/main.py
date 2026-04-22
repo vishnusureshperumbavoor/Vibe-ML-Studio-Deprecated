@@ -102,7 +102,7 @@ async def execute_code(req: ExecuteRequest):
                 packages = [p for p in packages if p.lower() not in BUILT_INS]
                 if packages:
                     pkg_str = " ".join(packages)
-                    python_code_lines.append(f'import os; os.system("{sys.executable} -m pip install {pkg_str}")')
+                    python_code_lines.append(f'import os; os.system(\'"{sys.executable}" -m pip install {pkg_str}\')')
                 continue 
             
             command = stripped.lstrip("!%")

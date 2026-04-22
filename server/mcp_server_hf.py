@@ -207,8 +207,10 @@ async def handle_call_tool(
         dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
         model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
         
-        # Unified path: Nesting in server/models/adapters
-        output_dir = os.path.join(os.getcwd(), "server", "models", "adapters", model_slug)
+        # Dynamic path resolution: Detect if we are in 'server/' or project root
+        cwd = os.getcwd()
+        base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
+        output_dir = os.path.join(base_path, "models", "adapters", model_slug)
         
         # Split into logical blocks for the notebook
         blocks = [
@@ -231,17 +233,31 @@ epochs = {epochs}
 rank = {rank}
 device = "cuda" if torch.cuda.is_available() and hardware.upper() == "GPU" else "cpu"
 
+# VML-Standard Structure (CWD-Aware)
+cwd = os.getcwd()
+base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
+base_models_dir = os.path.join(base_path, "models", "base_models")
+os.makedirs(base_models_dir, exist_ok=True)
+
 print(f"Initializing VML SFT Pipeline: {{model_id}} on {{dataset_id}} ({{device}})")
 """,
             f"""# Block 2: Model and Tokenizer Loading
+from huggingface_hub import snapshot_download
+print(f"📥 Acquiring base model weights for {{model_id}}...")
+local_model_path = snapshot_download(
+    repo_id=model_id,
+    local_dir=os.path.join(base_models_dir, model_id.replace('/', '_')),
+    ignore_patterns=["*.msgpack", "*.h5", "*.ot", "*.onnx", "framework_specific*"]
+)
+
 print("Loading Model and Tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained(local_model_path)
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 torch_dtype = torch.bfloat16 if device == "cuda" else torch.float32
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
+    local_model_path,
     device_map=device,
     torch_dtype=torch_dtype,
 )
@@ -259,8 +275,25 @@ model = get_peft_model(model, peft_config)
 model.print_trainable_parameters()
 """,
             f"""# Block 3: Dataset Preparation
-print("Loading and mapping dataset...")
-dataset = load_dataset(dataset_id, split="train[:500]")
+print("🔍 Locating dataset...")
+import os
+from datasets import load_dataset
+
+# Robust local path resolution
+cwd = os.getcwd()
+base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
+local_path = os.path.join(base_path, "data", "datasets", "{dataset_id}")
+
+if os.path.exists(local_path):
+    print(f"📦 Found local dataset: {{local_path}}")
+    dataset = load_dataset("json", data_files=local_path, split="train[:500]")
+else:
+    if "{dataset_id}".endswith((".jsonl", ".json", ".csv")):
+        print(f"❌ Local file not found at {{local_path}}. Since it has a file extension, skipping HF Hub fallback.")
+        raise FileNotFoundError(f"Local dataset {{local_path}} not found.")
+    
+    print(f"🌐 Local dataset not found. Attempting to fetch from Hugging Face: {{dataset_id}}")
+    dataset = load_dataset("{dataset_id}", split="train[:500]")
 
 def get_universal_format(example):
     input_keys = ["instruction", "prompt", "query", "question", "input"]
@@ -272,6 +305,7 @@ def get_universal_format(example):
     context = example.get("input", "") if "instruction" in example else ""
     return {{"text": f"{{instr}}\\n{{context}}\\n{{out}}"}}
 
+print("🛠️ Mapping dataset to instructions...")
 dataset = dataset.map(get_universal_format)
 """,
             f"""# Block 4: Training Execution
@@ -283,14 +317,19 @@ class VMLReportingCallback(transformers.TrainerCallback):
             logs["vml_total_steps"] = state.max_steps
             print(f"[VML_DATA] {{json.dumps(logs)}}")
 
+# Resolve output path dynamically
+cwd = os.getcwd()
+base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
+output_dir = os.path.join(base_path, "models", "adapters", "{model_slug}")
+
 sft_config = SFTConfig(
-    output_dir=r"{output_dir}",
+    output_dir=output_dir,
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
     learning_rate=2e-4,
     num_train_epochs={epochs},
     logging_steps=1,
-    max_steps=20,
+    max_steps=3,
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",
@@ -308,11 +347,13 @@ trainer = SFTTrainer(
 )
 
 print("Starting training loop...")
+# Ensure output directory exists before training
+os.makedirs(output_dir, exist_ok=True)
 trainer.train()
 """,
             f"""# Block 5: Export and Weights Persistence
-print(f"Saving fine-tuned adapters to {output_dir}...")
-trainer.save_model(r"{output_dir}")
+print(f"Saving fine-tuned adapters to {{output_dir}}...")
+trainer.save_model(output_dir)
 print("✅ Local weights stored successfully.")
 """,
             f"""# Block 5.5: LoRA-to-GGUF Conversion (for Arena Chat)
@@ -322,35 +363,31 @@ import subprocess
 
 tools_cache = os.path.join(os.getcwd(), "server", ".cache", "vml-tools")
 lora_converter = os.path.join(tools_cache, "convert_lora_to_gguf.py")
-adapter_gguf = os.path.join(r"{output_dir}", "adapter.gguf")
+adapter_gguf = os.path.join(output_dir, "adapter.gguf")
 
 print("🔄 Converting LoRA adapters to GGUF format for VML Arena...")
 try:
     # We call the llama.cpp lora converter on the adapter directory
     subprocess.run([
         sys.executable, lora_converter, 
-        r"{output_dir}", 
+        output_dir, 
         "--outfile", adapter_gguf
     ], check=True)
     print(f"✅ LoRA GGUF ready at: {{adapter_gguf}}")
 except Exception as e:
     print(f"❌ LoRA conversion failed: {{e}}")
 """,
-            f"""# Block 6: Cloud Deployment (Unified VML Uploader)
-print("🚀 Initiating Autonomous HF Deployment...")
-import sys
-sys.path.append(os.path.join(os.getcwd(), "server"))
-
-try:
-    from hf_uploader import upload_to_hf
-    # Upload the entire adapter folder
-    upload_to_hf(r"{output_dir}", "{model_slug}")
-except ImportError:
-    print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
-except Exception as e:
-    print(f"⚠️ Deployment failed: {{e}}")
-
-print("🏁 VML SFT Pipeline Complete and Synced.")
+            f"""# Block 6: VML Agentic Handoff
+print("🏁 SFT Phase Complete. Sending handoff signal to Orchestrator...")
+import json
+handoff_data = {{
+    "vml_type": "HANDOFF_SFT_COMPLETE",
+    "adapter_dir": output_dir,
+    "model_slug": "{model_slug}",
+    "base_model": "{base_model}",
+    "dataset_id": "{dataset_id}"
+}}
+print(f"[VML_HANDOFF] {{json.dumps(handoff_data)}}")
 """
         ]
         
@@ -372,9 +409,12 @@ import subprocess
 model_id = "{model_id}"
 bits = "{bits}"
 target_filename = "{target_filename}"
-# VML-Standard Structure (Nested)
-gguf_dir = os.path.join(os.getcwd(), "server", "models", "gguf")
-base_models_dir = os.path.join(os.getcwd(), "server", "models", "base_models")
+# VML-Standard Structure (CWD-Aware)
+cwd = os.getcwd()
+base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
+gguf_dir = os.path.join(base_path, "models", "gguf")
+base_models_dir = os.path.join(base_path, "models", "base_models")
+
 os.makedirs(gguf_dir, exist_ok=True)
 os.makedirs(base_models_dir, exist_ok=True)
 
@@ -391,7 +431,7 @@ class VMLProgress:
     def update(self, n):
         self.n += n
         pct = min(100, int((self.n / self.total) * 100))
-        print(f"[VML_DATA] {{\"type\": \"progress\", \"percentage\": {{pct}}}}")
+        print(f"[VML_DATA] {{'type': 'progress', 'percentage': {{pct}}}}")
     def close(self): pass
     def __enter__(self): return self
     def __exit__(self, *args): pass
@@ -441,18 +481,18 @@ except Exception as e:
     print(f"❌ Quantization failed: {{e}}")
     sys.exit(1)
 """,
-            f"""# Block 5: Unified Cloud Deployment
-print("🚀 Initiating Autonomous HF Deployment...")
-import sys
-sys.path.append(os.path.join(os.getcwd(), "server"))
-try:
-    from hf_uploader import upload_to_hf
-    # Upload the single GGUF file to the same repo
-    upload_to_hf(output_path, "{model_name_clean.lower()}")
-except ImportError:
-    print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
-except Exception as e:
-    print(f"⚠️ Deployment failed: {{e}}")
+            f"""# Block 5: Unified Cloud Deployment (DISABLED FOR TESTING)
+print("🚀 Cloud Deployment is currently DISABLED in testing mode.")
+# import sys
+# sys.path.append(os.path.join(os.getcwd(), "server"))
+# try:
+#     from hf_uploader import upload_to_hf
+#     # Upload the single GGUF file to the same repo with metadata
+#     upload_to_hf(output_path, "{model_name_clean.lower()}", "{model_id}", "Fine-tuned VML Dataset")
+# except ImportError:
+#     print("⚠️ hf_uploader.py not found. Skipping cloud deployment.")
+# except Exception as e:
+#     print("❌ Deployment failed: {{e}}")
 
 print("🏁 VML Quantization Pipeline Complete.")
 """

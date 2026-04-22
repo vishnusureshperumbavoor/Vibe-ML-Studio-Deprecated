@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { 
   LineChart, 
   Line, 
@@ -195,7 +195,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
         <MetricCard icon={<Clock size={14} className="text-blue-500" />} label="Runtime" value={durationStr} />
         <MetricCard icon={<Target size={14} className="text-amber-500" />} label="Loss" value={currentLoss} precision={3} trend={lossTrend} />
         <MetricCard icon={<Zap size={14} className="text-purple-500" />} label="Step" value={currentStep} total={totalSteps} />
-        <MetricCard icon={<Gauge size={14} className="text-emerald-500" />} label="Grad Norm" value={currentGradNorm} precision={3} />
+        <MetricCard icon={<Gauge size={14} className="text-blue-500" />} label="Grad Norm" value={currentGradNorm} precision={3} />
         <MetricCard icon={<Activity size={14} className="text-emerald-500" />} label="Accuracy" value={currentAccuracy} precision={3} />
       </div>
 
@@ -223,22 +223,6 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
           </ResponsiveContainer>
         </ChartContainer>
 
-        {/* Learning Rate - Scheduled Decay */}
-        <ChartContainer title="Learning Rate" subtitle="Scheduled Steps">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-              <XAxis dataKey="vml_step" hide />
-              <YAxis hide />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
-                itemStyle={{ color: '#8B5CF6' }}
-              />
-              <Line type="monotone" dataKey="learning_rate" stroke="#8B5CF6" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-
         {/* Gradient Norm - Stability Tracker */}
         <ChartContainer title="Gradient Norm" subtitle="Numerical Stability">
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -248,9 +232,9 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
               <YAxis hide />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
-                itemStyle={{ color: '#10B981' }}
+                itemStyle={{ color: '#3B82F6' }}
               />
-              <Line type="monotone" dataKey="grad_norm" stroke="#10B981" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="grad_norm" stroke="#3B82F6" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
@@ -283,8 +267,8 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
             <AreaChart data={data}>
               <defs>
                 <linearGradient id="colorEntropy" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.1}/>
-                  <stop offset="95%" stopColor="#F59E0B" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
@@ -292,26 +276,10 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
               <YAxis domain={['auto', 'auto']} hide />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
-                itemStyle={{ color: '#F59E0B' }}
+                itemStyle={{ color: '#8B5CF6' }}
               />
-              <Area type="monotone" dataKey="entropy" stroke="#F59E0B" strokeWidth={2} fillOpacity={1} fill="url(#colorEntropy)" />
+              <Area type="monotone" dataKey="entropy" stroke="#8B5CF6" strokeWidth={2} fillOpacity={1} fill="url(#colorEntropy)" />
             </AreaChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-
-        {/* Token Throughout - Cumulative Volume */}
-        <ChartContainer title="Token Throughput" subtitle="Cumulative Dataset Volume">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
-              <XAxis dataKey="vml_step" hide />
-              <YAxis domain={['auto', 'auto']} hide />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#1A1625', border: '1px solid #3F3F46', fontSize: '10px', borderRadius: '8px' }}
-                itemStyle={{ color: '#3B82F6' }}
-              />
-              <Line type="monotone" dataKey="num_tokens" stroke="#3B82F6" strokeWidth={2} dot={false} />
-            </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
       </div>
