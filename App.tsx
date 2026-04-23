@@ -169,6 +169,13 @@ export default function App() {
     startTime: number;
   } | null>(null);
 
+  // SFT persistent state
+  const [sftModelId, setSftModelId] = useState('');
+  const [sftDatasetId, setSftDatasetId] = useState('');
+  const [sftHardware, setSftHardware] = useState('CPU');
+  const [sftMaxSteps, setSftMaxSteps] = useState(5);
+  const [sftRank, setSftRank] = useState(16);
+
   const handleCopyAll = () => {
     let context = "# VML STUDIO WORKFLOW REPORT\n\n";
 
@@ -1476,10 +1483,18 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                   onClearSelection={() => setPreSelectedDataset(null)}
                   deploymentUrl={deploymentUrl}
                   onTestInArena={() => {
-                    // This logic is for GGUF usually, but if deployed as adapter we could select it too
-                    // For now, let's assume conversion to GGUF happened or we jump to chat
                     setActiveView("chat");
                   }}
+                  modelId={sftModelId}
+                  setModelId={setSftModelId}
+                  datasetId={sftDatasetId}
+                  setDatasetId={setSftDatasetId}
+                  hardware={sftHardware}
+                  setHardware={setSftHardware}
+                  maxSteps={sftMaxSteps}
+                  setMaxSteps={setSftMaxSteps}
+                  rank={sftRank}
+                  setRank={setSftRank}
                 />
               ) : (
                 <QuantizationPanel

@@ -127,7 +127,7 @@ export const SmartSelector: React.FC<SmartSelectorProps> = ({ type, onSelect, pl
 
   // Update query if defaultValue changes externally
   useEffect(() => {
-    if (defaultValue) {
+    if (defaultValue !== undefined) {
         setQuery(defaultValue);
         skipSearchRef.current = true;
     }

@@ -11,6 +11,16 @@ interface FineTuningPanelProps {
   onClearSelection?: () => void;
   deploymentUrl?: string | null;
   onTestInArena?: () => void;
+  modelId: string;
+  setModelId: (val: string) => void;
+  datasetId: string;
+  setDatasetId: (val: string) => void;
+  hardware: string;
+  setHardware: (val: string) => void;
+  maxSteps: number;
+  setMaxSteps: (val: number) => void;
+  rank: number;
+  setRank: (val: number) => void;
 }
 
 export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({ 
@@ -20,13 +30,18 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
   preSelectedDataset,
   onClearSelection,
   deploymentUrl,
-  onTestInArena
+  onTestInArena,
+  modelId,
+  setModelId,
+  datasetId,
+  setDatasetId,
+  hardware,
+  setHardware,
+  maxSteps,
+  setMaxSteps,
+  rank,
+  setRank
 }) => {
-  const [modelId, setModelId] = useState('');
-  const [datasetId, setDatasetId] = useState('');
-  const [hardware, setHardware] = useState('CPU');
-  const [maxSteps, setMaxSteps] = useState(5);
-  const [rank, setRank] = useState(16);
   const [forecast, setForecast] = useState<string | null>(null);
   const [isForecasting, setIsForecasting] = useState(false);
 
@@ -156,6 +171,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
             type="model" 
             placeholder="Select model to train..." 
             onSelect={setModelId} 
+            defaultValue={modelId}
             suggestions={RECOMMENDED_MODELS}
           />
           <p className="text-[10px] text-white/30 px-1">Tip: Tiny models like Qwen-0.5B are best for CPU.</p>
@@ -167,6 +183,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
             type="dataset" 
             placeholder="Select instruction dataset..." 
             onSelect={setDatasetId} 
+            defaultValue={datasetId}
             suggestions={RECOMMENDED_DATASETS}
           />
           <p className="text-[10px] text-white/30 px-1">Try: 'yahma/alpaca-cleaned' for general instructions.</p>
