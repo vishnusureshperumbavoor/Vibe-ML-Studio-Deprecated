@@ -195,6 +195,24 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
   };
 
 
+  const handleBrowseFile = async () => {
+    try {
+      const resp = await fetch("http://127.0.0.1:2000/browse_pdf");
+      const data = await resp.json();
+      if (data.path) {
+        setSourceInput(data.path);
+        // Auto-generate collection name from filename if not set
+        if (!newCollectionName && !selectedCollection) {
+          const base = data.path.split(/[\\/]/).pop()?.split('.')[0];
+          if (base) setNewCollectionName(base + "-docs");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to open file browser:", e);
+    }
+  };
+
+
   const handleIngest = async () => {
     const collection = newCollectionName || selectedCollection;
     if (!collection) {
@@ -240,6 +258,7 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
           text: `✅ Harvest Complete: ${report.chunks} chunks indexed from ${report.source} (${Math.round(report.chars/1000)}k chars).`, 
           type: 'success' 
         });
+        setTimeout(() => setStatusMsg(null), 10000);
 
         // Save to history
         const newHistory = [sourceInput, ...sourceHistory.filter(s => s !== sourceInput)].slice(0, 10);
@@ -280,6 +299,7 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
         }
         fetchCollections();
         setStatusMsg({ text: `Collection '${collectionName}' deleted successfully.`, type: 'success' });
+        setTimeout(() => setStatusMsg(null), 5000);
       } else {
         setStatusMsg({ text: text || "Failed to delete collection.", type: 'error' });
       }
@@ -351,10 +371,10 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                         : 'hover:bg-purple-500/5 border border-transparent text-gray-400'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${selectedCollection === c.name ? 'bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-gray-600'}`} />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">{c.name}</span>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${selectedCollection === c.name ? 'bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-gray-600'}`} />
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-sm font-medium truncate pr-2" title={c.name}>{c.name}</span>
                         <span className="text-[10px] text-gray-500 font-mono tracking-tighter">{c.count} chunks</span>
                       </div>
                     </div>
@@ -406,30 +426,39 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                 <div className="space-y-4">
                   <label className="text-xs font-bold text-purple-400 uppercase tracking-widest pl-1">Knowledge Source</label>
                   <div className="relative">
-                    <input 
-                      type="text"
-                      list="source-history"
-                      value={sourceInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSourceInput(val);
-                        // Auto-generate collection name if empty
-                        if (!newCollectionName && !selectedCollection && val) {
-                          try {
-                            const url = new URL(val);
-                            const slug = url.hostname.split('.')[0] + "-site";
-                            setNewCollectionName(slug);
-                          } catch (e) {
-                            if (val.includes('\\') || val.includes('/')) {
-                               const base = val.split(/[\\/]/).pop()?.split('.')[0];
-                               if (base) setNewCollectionName(base + "-docs");
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        list="source-history"
+                        value={sourceInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSourceInput(val);
+                          // Auto-generate collection name if empty
+                          if (!newCollectionName && !selectedCollection && val) {
+                            try {
+                              const url = new URL(val);
+                              const slug = url.hostname.split('.')[0] + "-site";
+                              setNewCollectionName(slug);
+                            } catch (e) {
+                              if (val.includes('\\') || val.includes('/')) {
+                                 const base = val.split(/[\\/]/).pop()?.split('.')[0];
+                                 if (base) setNewCollectionName(base + "-docs");
+                              }
                             }
                           }
-                        }
-                      }}
-                      placeholder="Local PDF path (D:\...) or Web Link (http://...)"
-                      className="w-full bg-[#0D0B14] border border-purple-500/20 rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-purple-500 shadow-inner"
-                    />
+                        }}
+                        placeholder="Local PDF path or Web Link"
+                        className="flex-1 bg-[#0D0B14] border border-purple-500/20 rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-purple-500 shadow-inner"
+                      />
+                      <Button 
+                        onClick={handleBrowseFile}
+                        variant="ghost"
+                        className="h-auto px-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl text-purple-400 hover:bg-purple-500/20"
+                      >
+                        Browse
+                      </Button>
+                    </div>
                     <datalist id="source-history">
                       {sourceHistory.map(h => <option key={h} value={h} />)}
                       <option value="https://vishnusureshperumbavoor.github.io/V-S-P/" />

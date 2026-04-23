@@ -82,6 +82,30 @@ def get_skill_paths():
 
 from kernel import kernel_manager
 
+def open_file_dialog():
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    file_path = filedialog.askopenfilename(
+        title="Select PDF for VML Ingestion",
+        filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+    )
+    root.destroy()
+    return file_path
+
+@app.get("/browse_pdf")
+async def browse_pdf():
+    print("🔔 [VML] Received request for /browse_pdf")
+    """Opens a native Windows file dialog to select a PDF in a non-blocking way."""
+    try:
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(None, open_file_dialog)
+        return {"path": file_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/execute")
 async def execute_code(req: ExecuteRequest):
     code_lines = req.code.splitlines()
