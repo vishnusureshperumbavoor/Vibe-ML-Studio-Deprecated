@@ -19,9 +19,9 @@ let mcpClient = null;
 async function initMCP() {
     console.log("🚀 [Node Bridge] Spawning your Custom Python MCP Server...");
     
-    // We launch the Python executable, and pass your mcp_server_hf.py as the argument!
+    // We launch the Python executable, and pass your agent_orchestrator.py as the argument!
     const pythonExec = path.resolve('../server/venv/Scripts/python.exe');
-    const pythonScript = path.resolve('../server/mcp_server_hf.py');
+    const pythonScript = path.resolve('../server/agent_orchestrator.py');
 
     const transport = new StdioClientTransport({
         command: pythonExec,

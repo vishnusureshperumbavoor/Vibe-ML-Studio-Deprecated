@@ -8,4 +8,4 @@
 - **Gradient Accumulation:** Techniques for training on large datasets with limited batch sizes.
 
 ## VML-Native Implementation
-Reference the `server/mcp_server_hf.py` for the current implementation of the automated SFT block generation.
+Reference the `server/agent_orchestrator.py` for the current implementation of the automated SFT block generation.
