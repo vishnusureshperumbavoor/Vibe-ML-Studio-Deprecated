@@ -13,7 +13,8 @@ import {
   Sparkles,
   Share2,
   ExternalLink,
-  Activity
+  Activity,
+  Brain
 } from 'lucide-react';
 import { Button } from './Button';
 
@@ -43,6 +44,41 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
   const [newCollectionName, setNewCollectionName] = useState('');
   const newNameRef = React.useRef<HTMLInputElement>(null);
   const [localDatasets, setLocalDatasets] = useState<any[]>([]);
+  const [distillPersona, setDistillPersona] = useState('Standard Expert');
+  const [personaSearch, setPersonaSearch] = useState('');
+  const [showPersonaMenu, setShowPersonaMenu] = useState(false);
+  const personaRef = React.useRef<HTMLDivElement>(null);
+
+  const personaOptions = [
+    "Standard Expert",
+    "HR Policy Specialist",
+    "Financial Auditor",
+    "Marketing Strategist",
+    "Sales & Outreach Consultant",
+    "Product Strategy Manager",
+    "Radiologist",
+    "Cardiologist",
+    "ECG Specialist",
+    "Pathologist",
+    "Neurologist",
+    "Endoscopiologist",
+    "Medical Research Lead",
+    "Clinical Data Analyst"
+  ];
+
+  const filteredPersonas = personaOptions.filter(p => 
+    p.toLowerCase().includes(personaSearch.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (personaRef.current && !personaRef.current.contains(event.target as Node)) {
+        setShowPersonaMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchLocalDatasets = async () => {
     try {
@@ -170,7 +206,8 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           collection_name: selectedCollection,
-          auto_deploy: isAgentic
+          auto_deploy: isAgentic,
+          persona: distillPersona
         })
       });
     } catch (e) {
@@ -313,38 +350,12 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
 
   return (
     <div className="flex flex-col w-full h-full bg-[#0B090F] text-[#E2D8F0] overflow-hidden">
-      {/* Header */}
-      <div className="flex-none w-full px-12 py-6 border-b border-purple-500/20 bg-[#140F1D]/50 backdrop-blur-xl flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-purple-500/10 rounded-xl border border-purple-500/20">
-            <Database className="text-purple-400" size={24} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Knowledge Library</h1>
-            <p className="text-xs text-purple-400/60 font-medium uppercase tracking-wider">Enterprise Semantic Miner</p>
-          </div>
-        </div>
-      </div>
-
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar: Collections */}
         <div className="w-80 border-r border-purple-500/10 flex flex-col bg-[#0D0B14]">
           <div className="p-6 flex-1 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xs font-bold text-purple-400 uppercase tracking-widest">Collections</h3>
-              <Button 
-                size="sm" 
-                variant="ghost" 
-                className="h-7 w-7 p-0 rounded-lg hover:bg-purple-500/10 text-purple-400"
-                onClick={() => {
-                  setSelectedCollection(null);
-                  setNewCollectionName('');
-                  setSourceInput('');
-                  newNameRef.current?.focus();
-                }}
-              >
-                <Plus size={14} />
-              </Button>
             </div>
 
             {isLoading ? (
@@ -415,7 +426,7 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-purple-500/10 rounded-lg">
-                  <Plus className="text-purple-400" size={20} />
+                  <Brain className="text-purple-400" size={20} />
                 </div>
                 <h2 className="text-lg font-semibold">Ingest New Knowledge</h2>
               </div>
@@ -621,14 +632,70 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                             Dataset Ready (Local)
                          </div>
                        ) : (
-                         <Button 
-                          variant="ghost" 
-                          onClick={() => handleStartDistillation(true)}
-                          className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group"
-                        >
-                          <Sparkles size={12} className="group-hover:animate-pulse" />
-                          Distill to Dataset
-                        </Button>
+                         <div className="flex items-center gap-2 relative" ref={personaRef}>
+                           <div className="relative">
+                             <input 
+                               type="text"
+                               value={showPersonaMenu ? personaSearch : distillPersona}
+                               onChange={(e) => {
+                                 setPersonaSearch(e.target.value);
+                                 setShowPersonaMenu(true);
+                               }}
+                               onFocus={() => {
+                                 setPersonaSearch('');
+                                 setShowPersonaMenu(true);
+                               }}
+                               onKeyDown={(e) => {
+                                 if (e.key === 'Enter') {
+                                   if (filteredPersonas.length > 0) {
+                                     setDistillPersona(filteredPersonas[0]);
+                                   } else {
+                                     setDistillPersona(personaSearch);
+                                   }
+                                   setShowPersonaMenu(false);
+                                 }
+                               }}
+                               placeholder="Search persona..."
+                               className="text-[10px] bg-[#0B090F] border border-indigo-500/30 rounded-lg px-3 py-1.5 text-indigo-200 outline-none focus:border-indigo-500 font-bold uppercase tracking-wider h-8 w-48"
+                             />
+                             {showPersonaMenu && (
+                               <div className="absolute bottom-full mb-2 left-0 w-64 bg-[#140F1D] border border-indigo-500/30 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto p-1 backdrop-blur-xl">
+                                 {filteredPersonas.length > 0 ? (
+                                   filteredPersonas.map(p => (
+                                     <button
+                                       key={p}
+                                       onClick={() => {
+                                         setDistillPersona(p);
+                                         setShowPersonaMenu(false);
+                                       }}
+                                       className="w-full text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/20 rounded-lg transition-all"
+                                     >
+                                       {p}
+                                     </button>
+                                   ))
+                                 ) : (
+                                   <button
+                                     onClick={() => {
+                                       setDistillPersona(personaSearch);
+                                       setShowPersonaMenu(false);
+                                     }}
+                                     className="w-full text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-all"
+                                   >
+                                     Use Custom: "{personaSearch}"
+                                   </button>
+                                 )}
+                               </div>
+                             )}
+                           </div>
+                           <Button 
+                             variant="ghost" 
+                             onClick={() => handleStartDistillation(true)}
+                             className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group h-8"
+                           >
+                             <Sparkles size={12} className="group-hover:animate-pulse" />
+                             Distill
+                           </Button>
+                         </div>
                        )}
                       <Button 
                         variant="ghost" 

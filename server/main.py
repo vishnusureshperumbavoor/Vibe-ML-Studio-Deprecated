@@ -370,6 +370,7 @@ class DistillRequest(BaseModel):
     collection_name: str
     dataset_name: Optional[str] = None
     auto_deploy: bool = False
+    persona: Optional[str] = None
 
 @app.post("/distill/start")
 async def start_distillation(req: DistillRequest):
@@ -378,8 +379,8 @@ async def start_distillation(req: DistillRequest):
         raise HTTPException(status_code=400, detail="A distillation task is already running.")
     
     # We run it in the background with the autonomous flag
-    asyncio.create_task(distiller.distill_collection(req.collection_name, auto_deploy=req.auto_deploy))
-    return {"status": "started", "collection": req.collection_name, "auto_deploy": req.auto_deploy}
+    asyncio.create_task(distiller.distill_collection(req.collection_name, auto_deploy=req.auto_deploy, persona=req.persona))
+    return {"status": "started", "collection": req.collection_name, "auto_deploy": req.auto_deploy, "persona": req.persona}
 
 @app.get("/distill/status")
 async def get_distill_status():

@@ -333,12 +333,12 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
       for (const blockScript of blocks) {
         const cellId = uuidv4();
         const modelPart =
-          modelId.split("/").pop()?.toLowerCase().replace(/\./g, "-") ||
+          modelId.split("/").pop()?.toLowerCase().replace(/\./g, "-").replace(/_/g, "-") ||
           "model";
         const datasetPart =
-          datasetId.split("/").pop()?.toLowerCase().replace(/\./g, "-") ||
+          datasetId.split("/").pop()?.split("_").slice(0, 2).join("-").toLowerCase().replace(/\./g, "-") ||
           "dataset";
-        const modelSlug = `${modelPart}-${datasetPart}-instruct-vml1`;
+        const modelSlug = `${modelPart}-${datasetPart}-vml1`;
         const deploymentName = modelSlug; // Keep them consistent for simplicity and clarity
 
         const newCell: CellData = {
