@@ -170,9 +170,9 @@ export default function App() {
   } | null>(null);
 
   // SFT persistent state
-  const [sftModelId, setSftModelId] = useState('');
-  const [sftDatasetId, setSftDatasetId] = useState('');
-  const [sftHardware, setSftHardware] = useState('CPU');
+  const [sftModelId, setSftModelId] = useState("");
+  const [sftDatasetId, setSftDatasetId] = useState("");
+  const [sftHardware, setSftHardware] = useState("CPU");
   const [sftMaxSteps, setSftMaxSteps] = useState(5);
   const [sftRank, setSftRank] = useState(16);
 
@@ -1495,19 +1495,24 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
             {/* Notebook Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden pt-6 pb-40 px-4 md:px-8 transition-all duration-500">
               <div className="max-w-5xl mx-auto space-y-6">
-                
                 <div className="sticky top-0 z-30 flex justify-end pb-4 -mx-4 px-4 md:-mx-8 md:px-8 bg-gradient-to-b from-[#0B090F] via-[#0B090F] to-transparent pt-4 -mt-4 pointer-events-none">
                   <button
                     onClick={handleCopyAll}
                     className={`flex items-center gap-2 px-4 py-2 rounded-2xl border transition-all duration-300 pointer-events-auto shadow-2xl backdrop-blur-md ${
-                      wasCopyAllClicked 
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-emerald-500/10" 
+                      wasCopyAllClicked
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-emerald-500/10"
                         : "bg-[#140F1D]/80 border-white/10 text-white/40 hover:bg-[#140F1D] hover:border-white/20 hover:text-white"
                     }`}
                   >
-                    {wasCopyAllClicked ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                    {wasCopyAllClicked ? (
+                      <CheckCircle2 size={14} />
+                    ) : (
+                      <Copy size={14} />
+                    )}
                     <span className="text-[10px] font-black tracking-widest uppercase">
-                      {wasCopyAllClicked ? "COPIED TO CLIPBOARD" : "COPY NOTEBOOK CONTEXT"}
+                      {wasCopyAllClicked
+                        ? "COPIED TO CLIPBOARD"
+                        : "COPY NOTEBOOK CONTEXT"}
                     </span>
                   </button>
                 </div>
@@ -1594,13 +1599,13 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                   <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
                     <Sparkles size={48} className="mb-4 text-[#352554]" />
                     <p>
-                      Ladies and Gentlemen, you are not ready for this, Vibe
-                      Traning Agents. Type a prompt below.
+                      Ladies and Gentlemen, you are not ready for the Vibe
+                      Traning Agents.
                     </p>
                   </div>
                 )}
 
-                {/* Initial Cell Inserter (if empty) */}
+                {/* Initial Cell Inserter (if empty) 
                 {cells.length > 0 && (
                   <div className="group relative flex justify-center h-4 mb-[-8px] z-10">
                     <div className="absolute inset-0 flex items-center px-8 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1621,7 +1626,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                       </button>
                     </div>
                   </div>
-                )}
+                )} */}
 
                 {cells.map((cell, idx) => (
                   <React.Fragment key={cell.id}>
@@ -1641,7 +1646,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                       />
                     </div>
 
-                    {/* Intermediate Inserter */}
+                    {/* Intermediate Inserter 
                     <div className="group relative flex justify-center h-4 my-[-8px] z-10">
                       <div className="absolute inset-0 flex items-center px-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
@@ -1660,7 +1665,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                           <Plus size={10} /> TEXT
                         </button>
                       </div>
-                    </div>
+                    </div> */}
                   </React.Fragment>
                 ))}
 
@@ -1680,17 +1685,14 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
           </>
         )}
       </div>
-
-      {/* Bottom Prompt Bar - Floating */}
+      {/* Bottom Prompt Bar - Floating 
       {activeView === "studio" && (
         <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
           <div className="max-w-3xl mx-auto pointer-events-auto">
             <div
               className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-visible flex flex-col ${isGenerating || isAutoRunning ? "border-purple-500 shadow-purple-500/20" : "border-[#352554] hover:border-gray-500"}`}
             >
-              {/* Mode Selector and Input Area */}
               <div className="flex items-end p-2 gap-2">
-                {/* Quick actions menu */}
                 <div className="relative" ref={plusMenuRef}>
                   <button
                     onClick={() => setIsPlusMenuOpen((prev) => !prev)}
@@ -1777,7 +1779,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                                     <button
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        handleViewSkillInstructions(skill.name);
+                                        handleToggleSkillAutoActivate(skill.name);
                                       }}
                                       className="text-slate-300 hover:text-white"
                                     >
@@ -1899,7 +1901,6 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                     </div>
                   </div>
                 )}
-                {/* Mode Toggle Button */}
                 <button
                   onClick={() =>
                     setMode((prev) => (prev === "agent" ? "plan" : "agent"))
@@ -1960,7 +1961,6 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                 </button>
               </div>
 
-              {/* Loading Progress Bar */}
               {(isGenerating || isAutoRunning) && (
                 <div className="absolute bottom-2 left-4 right-4 h-0.5 bg-white/5 overflow-hidden rounded-full pointer-events-none">
                   <div
@@ -1971,7 +1971,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
             </div>
           </div>
         </div>
-      )}
+      )} */}
       <ManageSkillsPanel
         visible={showManageSkills}
         onClose={() => setShowManageSkills(false)}
