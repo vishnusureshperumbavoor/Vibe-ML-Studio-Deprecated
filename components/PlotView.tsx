@@ -80,63 +80,7 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
     durationStr = `${mins}:${secs}`;
   }
 
-  // Autonomous Handover Logic
-  React.useEffect(() => {
-    if (samplesPerSec && !hasTriggeredDeploy.current && deployState === 'idle') {
-      hasTriggeredDeploy.current = true;
-      handleAutoDeploy();
-    }
-  }, [samplesPerSec]);
 
-  const handleAutoDeploy = async () => {
-    setDeployState('deploying');
-    setDeployMessage('Initializing deployment...');
-    try {
-      const modelName = metadata?.model_name || "Vibe-Finetuned-Model";
-      const modelSlug = metadata?.model_slug || "Vibe-Finetuned-Model-Slug";
-
-      const response = await fetch("http://127.0.0.1:2000/register_model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model_name: modelName,
-          model_slug: modelSlug
-        })
-      });
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("Stream failure");
-
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.trim().startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.trim().slice(6));
-              if (data.status === 'error') throw new Error(data.message);
-              setDeployMessage(data.message);
-              if (data.status === 'success') {
-                setDeployState('ready');
-                return;
-              }
-            } catch (e: any) {
-              console.warn("Parse error in deploy stream", e);
-              if (e.message) throw e;
-            }
-          }
-        }
-      }
-    } catch (e: any) {
-      console.error(e);
-      setDeployState('error');
-      setDeployMessage(e.message || "Deployment failed");
-    }
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -144,49 +88,33 @@ export const PlotView: React.FC<PlotViewProps> = ({ data, onOpenArena, metadata 
       {samplesPerSec && (
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 animate-in slide-in-from-top duration-1000">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${deployState === 'ready' ? 'bg-purple-500/20' : 'bg-emerald-500/10'}`}>
-              {deployState === 'deploying' ? <Loader2 size={16} className="text-purple-400 animate-spin" /> : 
-               deployState === 'ready' ? <CheckCircle2 size={16} className="text-purple-400" /> :
-               <Zap size={16} className="text-emerald-500" />}
+            <div className="p-2 rounded-lg bg-emerald-500/10">
+               <Zap size={16} className="text-emerald-500" />
             </div>
             <div>
-              <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${deployState === 'ready' ? 'text-purple-400' : 'text-emerald-500/60'}`}>
-                {deployState === 'deploying' ? deployMessage : 
-                 deployState === 'ready' ? 'Model Ready in Arena' : 
-                 'Training Complete'}
+              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/60">
+                 Training Complete
               </h4>
               <p className="text-[9px] text-emerald-500/40 uppercase tracking-widest">
-                {deployState === 'deploying' ? 'Local Inference Handover' : 
-                 deployState === 'error' ? deployMessage :
-                 'Efficiency & Hardware Throughput Summary'}
+                 Efficiency & Hardware Throughput Summary
               </p>
             </div>
           </div>
           
-          {deployState === 'ready' ? (
-            <button 
-              onClick={() => onOpenArena?.(metadata?.model_name || "Vibe-Finetuned-Model")}
-              className="group flex items-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-purple-500 transition-all shadow-lg shadow-purple-900/40 animate-pulse hover:animate-none"
-            >
-              Open in Arena
-              <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          ) : (
-            <div className="flex items-center gap-8 pr-4">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Total Throughput</span>
-                <span className="text-sm font-black text-white/70 tabular-nums">{samplesPerSec} <span className="text-[8px] font-normal text-white/30">samples/s</span></span>
-              </div>
-              <div className="flex flex-col border-l border-white/5 pl-8">
-                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Iteration Speed</span>
-                <span className="text-sm font-black text-white/70 tabular-nums">{stepsPerSec} <span className="text-[8px] font-normal text-white/30">steps/s</span></span>
-              </div>
-              <div className="flex flex-col border-l border-white/5 pl-8">
-                <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Computational Work</span>
-                <span className="text-sm font-black text-white/70 tabular-nums">{tflops} <span className="text-[8px] font-normal text-white/30">TFLOPs</span></span>
-              </div>
+          <div className="flex items-center gap-8 pr-4">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Total Throughput</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{samplesPerSec} <span className="text-[8px] font-normal text-white/30">samples/s</span></span>
             </div>
-          )}
+            <div className="flex flex-col border-l border-white/5 pl-8">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Iteration Speed</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{stepsPerSec} <span className="text-[8px] font-normal text-white/30">steps/s</span></span>
+            </div>
+            <div className="flex flex-col border-l border-white/5 pl-8">
+              <span className="text-[8px] font-bold text-white/20 uppercase tracking-wider mb-1">Computational Work</span>
+              <span className="text-sm font-black text-white/70 tabular-nums">{tflops} <span className="text-[8px] font-normal text-white/30">TFLOPs</span></span>
+            </div>
+          </div>
         </div>
       )}
 
