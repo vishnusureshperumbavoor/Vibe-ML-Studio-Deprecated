@@ -61,7 +61,9 @@ async def handle_list_tools() -> list[types.Tool]:
                 "properties": {
                     "base_model": {"type": "string", "description": "Hugging Face Model ID"},
                     "dataset_id": {"type": "string", "description": "Hugging Face Dataset ID"},
-                    "hardware_target": {"type": "string", "description": "Target hardware: 'CPU' or 'GPU'", "default": "CPU"}
+                    "hardware_target": {"type": "string", "description": "Target hardware: 'CPU' or 'GPU'", "default": "CPU"},
+                    "max_steps": {"type": "integer", "description": "Total training steps", "default": 300},
+                    "rank": {"type": "integer", "description": "LoRA Rank", "default": 16}
                 },
                 "required": ["base_model", "dataset_id"],
             },
@@ -200,7 +202,7 @@ async def handle_call_tool(
         base_model = arguments.get("base_model")
         dataset_id = arguments.get("dataset_id")
         hardware = arguments.get("hardware_target", "CPU")
-        epochs = arguments.get("epochs", 3)
+        max_steps = arguments.get("max_steps", 300)
         rank = arguments.get("rank", 16)
         
         model_name_part = base_model.split('/')[-1].lower().replace('.', '-')
@@ -238,7 +240,7 @@ from peft import LoraConfig, get_peft_model
 model_id = "{base_model}"
 dataset_id = "{dataset_id}"
 hardware = "{hardware}"
-epochs = {epochs}
+max_steps = {max_steps}
 rank = {rank}
 device = "cuda" if torch.cuda.is_available() and hardware.upper() == "GPU" else "cpu"
 
@@ -338,7 +340,7 @@ sft_config = SFTConfig(
     learning_rate=5e-4,
     num_train_epochs=15,
     logging_steps=1,
-    max_steps=3,
+    max_steps=max_steps,
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",

@@ -245,7 +245,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
     }
   };
 
-  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => {
+  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, maxSteps: number, rank: number) => {
     setIsWorkflowExecuting(true);
     setDeploymentUrl(null);
     setWorkflowModelFilename(null);
@@ -260,7 +260,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
             base_model: modelId, 
             dataset_id: datasetId, 
             hardware_target: hardware, 
-            epochs: epochs,
+            max_steps: maxSteps,
             rank: rank
           }
         })

@@ -4,7 +4,7 @@ import { SmartSelector } from './SmartSelector';
 import { callKimi } from '../services/aiService';
 
 interface FineTuningPanelProps {
-  onStart: (modelId: string, datasetId: string, hardware: string, epochs: number, rank: number) => void;
+  onStart: (modelId: string, datasetId: string, hardware: string, maxSteps: number, rank: number) => void;
   isExecuting: boolean;
   systemInfo?: any;
   preSelectedDataset?: string | null;
@@ -25,7 +25,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
   const [modelId, setModelId] = useState('');
   const [datasetId, setDatasetId] = useState('');
   const [hardware, setHardware] = useState('CPU');
-  const [epochs, setEpochs] = useState(3);
+  const [maxSteps, setMaxSteps] = useState(300);
   const [rank, setRank] = useState(16);
   const [forecast, setForecast] = useState<string | null>(null);
   const [isForecasting, setIsForecasting] = useState(false);
@@ -68,7 +68,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
         If it IS compatible, provide exactly two paragraphs:
         Paragraph 1: The narrative transformation (how this model will change after learning about "${domain}") and a HARDWARE-AWARE ESTIMATION (e.g. "Estimated Duration: ~8 mins on your CPU"). Explain how the selected Epochs and LoRA Rank will affect the depth of "${domain}" knowledge.
         Paragraph 2: 3 specific, DOMAIN-RELEVANT prompts that a user would actually ask a model trained on ${domain} knowledge. Avoid generic AI prompts like "Climate Change" or "Fantasy" unless the dataset is actually about those.` },
-        { role: 'user', content: `Base Model: ${modelId}\nKnowledge Dataset: ${datasetId} (Domain: ${domain})\nHardware Target: ${hardware}\nEpochs: ${epochs}\nLoRA Rank: ${rank}\nDetected System Specs: ${JSON.stringify(systemInfo)}` }
+        { role: 'user', content: `Base Model: ${modelId}\nKnowledge Dataset: ${datasetId} (Domain: ${domain})\nHardware Target: ${hardware}\nMax Steps: ${maxSteps}\nLoRA Rank: ${rank}\nDetected System Specs: ${JSON.stringify(systemInfo)}` }
       ];
       const result = await callKimi(prompt);
       setForecast(result);
@@ -174,31 +174,34 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
       </div>
 
       <div className="space-y-8 py-4">
-        {/* Epochs Slider */}
+        {/* Max Steps Slider */}
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <div className="space-y-0.5">
               <label className="text-[10px] font-bold text-white/60 uppercase tracking-widest flex items-center gap-2">
-                Training Epochs
-                <Activity size={10} className="text-amber-500/50" />
+                Training Steps
+                <Activity size={10} className={`text-amber-500/50 ${maxSteps >= 300 ? 'animate-pulse text-amber-500' : ''}`} />
               </label>
-              <p className="text-[8px] text-white/20 font-medium">Determines total passes over the dataset.</p>
+              <p className="text-[8px] text-white/20 font-medium">
+                {maxSteps >= 300 ? '✨ Deployment Threshold Met (Hugging Face Auto-Upload Enabled)' : 'Total optimization iterations on the dataset.'}
+              </p>
             </div>
-            <div className="text-sm font-black text-amber-500 tabular-nums bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.1)]">
-              {epochs} <span className="text-[8px] opacity-50 ml-0.5 font-bold">ROUNDS</span>
+            <div className={`text-sm font-black tabular-nums px-4 py-1.5 rounded-full border transition-all ${maxSteps >= 300 ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'text-white/40 bg-white/5 border-white/10'}`}>
+              {maxSteps} <span className="text-[8px] opacity-50 ml-0.5 font-bold">STEPS</span>
             </div>
           </div>
           <input
             type="range"
-            min="1"
-            max="10"
-            step="1"
-            value={epochs}
-            onChange={(e) => setEpochs(parseInt(e.target.value))}
+            min="5"
+            max="1000"
+            step="5"
+            value={maxSteps}
+            onChange={(e) => setMaxSteps(parseInt(e.target.value))}
             className="w-full h-1.5 bg-white/5 rounded-full appearance-none cursor-pointer accent-amber-500 hover:accent-amber-400 transition-all border border-white/5"
           />
           <div className="flex justify-between text-[8px] font-bold text-white/20 tracking-tighter px-1 uppercase">
-            <span>Fast Personality Shift</span>
+            <span>Quick Adaptation</span>
+            <span className={maxSteps >= 300 ? 'text-amber-500/40' : ''}>Autonomous Cloud Deployment (300+)</span>
             <span>Deep Knowledge Injection</span>
           </div>
         </div>
@@ -289,7 +292,7 @@ export const FineTuningPanel: React.FC<FineTuningPanelProps> = ({
 
       <button
         disabled={!modelId || !datasetId || isExecuting}
-        onClick={() => onStart(modelId, datasetId, hardware, epochs, rank)}
+        onClick={() => onStart(modelId, datasetId, hardware, maxSteps, rank)}
         className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-sm transition-all shadow-2xl scale-100 active:scale-95
           ${!modelId || !datasetId || isExecuting 
             ? 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5' 
