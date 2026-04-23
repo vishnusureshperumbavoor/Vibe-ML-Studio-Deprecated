@@ -143,17 +143,31 @@ export default function App() {
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [history, setHistory] = useState<any[]>([]);
-  const [activeView, setActiveView] = useState<'studio' | 'chat' | 'workflow' | 'knowledge'>('knowledge');
-  const [workflowMode, setWorkflowMode] = useState<'quantize' | 'finetune'>('finetune');
+  const [activeView, setActiveView] = useState<
+    "studio" | "chat" | "workflow" | "knowledge"
+  >("knowledge");
+  const [workflowMode, setWorkflowMode] = useState<"quantize" | "finetune">(
+    "finetune",
+  );
   const [isWorkflowExecuting, setIsWorkflowExecuting] = useState(false);
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null);
-  const [workflowModelFilename, setWorkflowModelFilename] = useState<string | null>(null);
+  const [workflowModelFilename, setWorkflowModelFilename] = useState<
+    string | null
+  >(null);
   const [systemInfo, setSystemInfo] = useState<any>(null);
-  const [chatSelectedModel, setChatSelectedModel] = useState<string>('');
-  const [preSelectedDataset, setPreSelectedDataset] = useState<string | null>(null);
+  const [chatSelectedModel, setChatSelectedModel] = useState<string>("");
+  const [preSelectedDataset, setPreSelectedDataset] = useState<string | null>(
+    null,
+  );
   const [wasCopyAllClicked, setWasCopyAllClicked] = useState(false);
   const stopExecutionRef = useRef(false);
   const stopAgentRef = useRef(false);
+  const [activeTrainingSession, setActiveTrainingSession] = useState<{
+    modelId: string;
+    datasetId: string;
+    maxSteps: number;
+    startTime: number;
+  } | null>(null);
 
   const handleCopyAll = () => {
     let context = "# VML STUDIO WORKFLOW REPORT\n\n";
@@ -169,7 +183,7 @@ export default function App() {
     cells.forEach((cell, index) => {
       context += `## CELL ${index + 1} (${cell.type.toUpperCase()})\n`;
       context += `**Status**: ${cell.status}\n\n`;
-      context += `### CONTENT\n\`\`\`${cell.type === 'code' ? 'python' : 'markdown'}\n${cell.content}\n\`\`\`\n\n`;
+      context += `### CONTENT\n\`\`\`${cell.type === "code" ? "python" : "markdown"}\n${cell.content}\n\`\`\`\n\n`;
       if (cell.output) {
         context += `### OUTPUT\n\`\`\`text\n${cell.output}\n\`\`\`\n\n`;
       }
@@ -183,7 +197,7 @@ export default function App() {
 
   const handleOpenArena = async (modelId: string) => {
     setChatSelectedModel(modelId);
-    setActiveView('chat');
+    setActiveView("chat");
   };
 
   const fetchSystemInfo = async () => {
@@ -191,7 +205,7 @@ export default function App() {
       const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "get_system_specs", arguments: {} })
+        body: JSON.stringify({ name: "get_system_specs", arguments: {} }),
       });
       const data = await resp.json();
       const text = data[0]?.text || "";
@@ -208,7 +222,12 @@ export default function App() {
     fetchSystemInfo();
   }, []);
 
-  const handleStartDeployment = async (path: string, slug: string, baseModel: string = "Unknown", datasetId: string = "Unknown") => {
+  const handleStartDeployment = async (
+    path: string,
+    slug: string,
+    baseModel: string = "Unknown",
+    datasetId: string = "Unknown",
+  ) => {
     try {
       const cellId = uuidv4();
       const code = `import sys
@@ -217,27 +236,42 @@ sys.path.append(os.path.join(os.getcwd(), "server"))
 from hf_uploader import upload_to_hf
 upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
 
-      setCells(prev => [...prev, { 
-        id: cellId, 
-        type: 'code', 
-        content: code, 
-        status: 'running' 
-      }]);
+      setCells((prev) => [
+        ...prev,
+        {
+          id: cellId,
+          type: "code",
+          content: code,
+          status: "running",
+        },
+      ]);
 
       const result = await executeCode(
         code,
-        (partial) => { setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c)); },
-        () => {}
+        (partial) => {
+          setCells((prev) =>
+            prev.map((c) => (c.id === cellId ? { ...c, output: partial } : c)),
+          );
+        },
+        () => {},
       );
 
-      setCells(prev => prev.map(c => c.id === cellId ? { 
-        ...c, 
-        status: result.error ? 'error' : 'success', 
-        output: result.error || result.text 
-      } : c));
+      setCells((prev) =>
+        prev.map((c) =>
+          c.id === cellId
+            ? {
+                ...c,
+                status: result.error ? "error" : "success",
+                output: result.error || result.text,
+              }
+            : c,
+        ),
+      );
 
       if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
-        const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
+        const urlMatch = result.text.match(
+          /\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/,
+        );
         if (urlMatch) setDeploymentUrl(urlMatch[1]);
       }
     } catch (e) {
@@ -245,10 +279,22 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
     }
   };
 
-  const handleStartSFT = async (modelId: string, datasetId: string, hardware: string, maxSteps: number, rank: number) => {
+  const handleStartSFT = async (
+    modelId: string,
+    datasetId: string,
+    hardware: string,
+    maxSteps: number,
+    rank: number,
+  ) => {
     setIsWorkflowExecuting(true);
     setDeploymentUrl(null);
     setWorkflowModelFilename(null);
+    setActiveTrainingSession({
+      modelId,
+      datasetId,
+      maxSteps,
+      startTime: Date.now(),
+    });
     try {
       // 1. Call MCP to get script
       const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
@@ -256,52 +302,60 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "start_sft_job",
-          arguments: { 
-            base_model: modelId, 
-            dataset_id: datasetId, 
-            hardware_target: hardware, 
+          arguments: {
+            base_model: modelId,
+            dataset_id: datasetId,
+            hardware_target: hardware,
             max_steps: maxSteps,
-            rank: rank
-          }
-        })
+            rank: rank,
+          },
+        }),
       });
       const data = await resp.json();
       const rawText = data.result?.[0]?.text || "";
-      
+
       let blocks = [rawText];
       if (rawText.startsWith("[VML_BLOCKS]")) {
         const jsonStr = rawText.replace("[VML_BLOCKS]", "").trim();
         blocks = JSON.parse(jsonStr);
       }
 
-      setActiveView('studio'); 
+      setActiveView("studio");
 
       // 2. Add and Execute Cells Sequentially
       for (const blockScript of blocks) {
         const cellId = uuidv4();
-        const modelPart = modelId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'model';
-        const datasetPart = datasetId.split('/').pop()?.toLowerCase().replace(/\./g, '-') || 'dataset';
+        const modelPart =
+          modelId.split("/").pop()?.toLowerCase().replace(/\./g, "-") ||
+          "model";
+        const datasetPart =
+          datasetId.split("/").pop()?.toLowerCase().replace(/\./g, "-") ||
+          "dataset";
         const modelSlug = `${modelPart}-${datasetPart}-instruct-vml1`;
         const deploymentName = modelSlug; // Keep them consistent for simplicity and clarity
 
-        const newCell: CellData = { 
-          id: cellId, 
-          type: 'code', 
-          content: blockScript, 
-          status: 'running',
+        const newCell: CellData = {
+          id: cellId,
+          type: "code",
+          content: blockScript,
+          status: "running",
           plots: [],
           metadata: {
             model_name: deploymentName,
-            model_slug: modelSlug
-          }
+            model_slug: modelSlug,
+          },
         };
-        
-        setCells(prev => [...prev, newCell]);
-        
+
+        setCells((prev) => [...prev, newCell]);
+
         const result = await executeCode(
-          blockScript, 
+          blockScript,
           (partial) => {
-            setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === cellId ? { ...c, output: partial } : c,
+              ),
+            );
           },
           (plotPoint) => {
             // Heuristic: If missing total steps, try to find in script
@@ -311,27 +365,44 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
             }
             // Add arrival timestamp for live runtime calculation
             plotPoint.timestamp = Date.now();
-            
-            setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
-          }
+
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === cellId
+                  ? { ...c, plots: [...(c.plots || []), plotPoint] }
+                  : c,
+              ),
+            );
+          },
         );
 
-        setCells(prev => prev.map(c => c.id === cellId ? { 
-          ...c, 
-          status: result.error ? 'error' : 'success', 
-          output: result.error || result.text 
-        } : c));
+        setCells((prev) =>
+          prev.map((c) =>
+            c.id === cellId
+              ? {
+                  ...c,
+                  status: result.error ? "error" : "success",
+                  output: result.error || result.text,
+                }
+              : c,
+          ),
+        );
 
         // ORCHESTRATION: Detect Agentic Handoff Signals
         if (result.text && result.text.includes("[VML_HANDOFF]")) {
-           try {
-             // Extract JSON from signal
-             const jsonStr = result.text.split("[VML_HANDOFF]")[1].trim().split('\n')[0];
-             const handoff = JSON.parse(jsonStr);
-             
-             if (handoff.vml_type === "HANDOFF_SFT_COMPLETE") {
-                console.log("🚀 VML Orchestrator: SFT Complete. Automated parallel tasks (Deployment/Quantization) are currently DISABLED for testing.");
-                /* 
+          try {
+            // Extract JSON from signal
+            const jsonStr = result.text
+              .split("[VML_HANDOFF]")[1]
+              .trim()
+              .split("\n")[0];
+            const handoff = JSON.parse(jsonStr);
+
+            if (handoff.vml_type === "HANDOFF_SFT_COMPLETE") {
+              console.log(
+                "🚀 VML Orchestrator: SFT Complete. Automated parallel tasks (Deployment/Quantization) are currently DISABLED for testing.",
+              );
+              /* 
                 // 1. Trigger Async Deployment (Parallel) with README metadata
                 handleStartDeployment(handoff.adapter_dir, handoff.model_slug, handoff.base_model, handoff.dataset_id);
                 
@@ -340,63 +411,106 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                   handleStartQuantization(handoff.base_model, "4"); 
                 }, 1000);
                 */
-             }
-           } catch (e) {
-             console.error("Orchestration signal parsing failed:", e);
-           }
+            }
+          } catch (e) {
+            console.error("Orchestration signal parsing failed:", e);
+          }
         }
 
         // Parse deployment URL if success signal is present (legacy support for single scripts)
         if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
-           const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
-           if (urlMatch) setDeploymentUrl(urlMatch[1]);
+          const urlMatch = result.text.match(
+            /\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/,
+          );
+          if (urlMatch) setDeploymentUrl(urlMatch[1]);
         }
 
-        if (result.error && mode === 'agent') {
+        if (result.error && mode === "agent") {
           let currentError = result.text || result.error;
           let currentCode = blockScript;
           let recoverySuccess = false;
 
           for (let attempt = 1; attempt <= 3; attempt++) {
             const nextId = uuidv4();
-            const nextCell: CellData = { 
-              id: nextId, 
-              type: 'code', 
-              content: `// VML Agent Recovery Attempt ${attempt}/3...`, 
-              status: 'running' 
+            const nextCell: CellData = {
+              id: nextId,
+              type: "code",
+              content: `// VML Agent Recovery Attempt ${attempt}/3...`,
+              status: "running",
             };
-            setCells(prev => [...prev, nextCell]);
-            
-            setThinking(`[Attempt ${attempt}/3] Analyzing error and generating autonomous fix...`);
-            setThinkingHistory(prev => [...prev, `Recovery Attempt ${attempt}: Analyzing latest error trace...`]);
-            
+            setCells((prev) => [...prev, nextCell]);
+
+            setThinking(
+              `[Attempt ${attempt}/3] Analyzing error and generating autonomous fix...`,
+            );
+            setThinkingHistory((prev) => [
+              ...prev,
+              `Recovery Attempt ${attempt}: Analyzing latest error trace...`,
+            ]);
+
             const fixedCode = await fixCodeError(currentCode, currentError);
-            setCells(prev => prev.map(c => c.id === nextId ? { ...c, content: fixedCode, status: 'success' } : c));
-            
-            setThinkingHistory(prev => [...prev, `Fix ${attempt} generated. Executing...`]);
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === nextId
+                  ? { ...c, content: fixedCode, status: "success" }
+                  : c,
+              ),
+            );
+
+            setThinkingHistory((prev) => [
+              ...prev,
+              `Fix ${attempt} generated. Executing...`,
+            ]);
             setThinking(null);
 
             // Execute the fixed chunk
-            setCells(prev => prev.map(c => c.id === nextId ? { ...c, status: 'running' } : c));
-            const retryResult = await executeCode(
-               fixedCode,
-               (partial) => { setCells(prev => prev.map(c => c.id === nextId ? { ...c, output: partial } : c)); },
-               (plotPoint) => { setCells(prev => prev.map(c => c.id === nextId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)); }
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === nextId ? { ...c, status: "running" } : c,
+              ),
             );
-            
-            setCells(prev => prev.map(c => c.id === nextId ? { 
-              ...c, 
-              status: retryResult.error ? 'error' : 'success', 
-              output: retryResult.error || retryResult.text 
-            } : c));
+            const retryResult = await executeCode(
+              fixedCode,
+              (partial) => {
+                setCells((prev) =>
+                  prev.map((c) =>
+                    c.id === nextId ? { ...c, output: partial } : c,
+                  ),
+                );
+              },
+              (plotPoint) => {
+                setCells((prev) =>
+                  prev.map((c) =>
+                    c.id === nextId
+                      ? { ...c, plots: [...(c.plots || []), plotPoint] }
+                      : c,
+                  ),
+                );
+              },
+            );
+
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === nextId
+                  ? {
+                      ...c,
+                      status: retryResult.error ? "error" : "success",
+                      output: retryResult.error || retryResult.text,
+                    }
+                  : c,
+              ),
+            );
 
             if (!retryResult.error) {
               recoverySuccess = true;
-              break; 
+              break;
             } else {
               currentError = retryResult.error || retryResult.text;
               currentCode = fixedCode;
-              setThinkingHistory(prev => [...prev, `Attempt ${attempt} failed. Re-evaluating...`]);
+              setThinkingHistory((prev) => [
+                ...prev,
+                `Attempt ${attempt} failed. Re-evaluating...`,
+              ]);
             }
           }
 
@@ -418,7 +532,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
     setWorkflowModelFilename(null);
     try {
       // For Arena redirect: predict filename
-      const modelNameClean = modelId.split('/').pop()?.toLowerCase();
+      const modelNameClean = modelId.split("/").pop()?.toLowerCase();
       setWorkflowModelFilename(`${modelNameClean}-q${bits}_0.gguf`);
 
       const resp = await fetch("http://127.0.0.1:1001/mcp/call", {
@@ -426,21 +540,24 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "start_quantization_job",
-          arguments: { model_id: modelId, bits: bits }
-        })
+          arguments: { model_id: modelId, bits: bits },
+        }),
       });
       const data = await resp.json();
       const rawText = data.result?.[0]?.text || data[0]?.text || "";
-      
+
       if (!rawText) {
         const errorMsg = data.error || data.message || "Unknown Error";
         const details = JSON.stringify(data, null, 2);
-        setCells(prev => [...prev, { 
-          id: uuidv4(), 
-          type: 'markdown', 
-          content: `### ❌ Quantization Tool Error\n**Response**: ${errorMsg}\n\n**Details**:\n\`\`\`json\n${details}\n\`\`\``, 
-          status: 'error' 
-        }]);
+        setCells((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            type: "markdown",
+            content: `### ❌ Quantization Tool Error\n**Response**: ${errorMsg}\n\n**Details**:\n\`\`\`json\n${details}\n\`\`\``,
+            status: "error",
+          },
+        ]);
         return;
       }
 
@@ -453,46 +570,63 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
           console.error("Failed to parse quantization blocks:", e);
         }
       }
-      
-      setActiveView('studio');
+
+      setActiveView("studio");
 
       // Add and Execute Cells Sequentially
       for (const blockScript of blocks) {
         const cellId = uuidv4();
-        const newCell: CellData = { 
-          id: cellId, 
-          type: 'code', 
-          content: blockScript, 
-          status: 'running' 
+        const newCell: CellData = {
+          id: cellId,
+          type: "code",
+          content: blockScript,
+          status: "running",
         };
-        
-        setCells(prev => [...prev, newCell]);
-        
+
+        setCells((prev) => [...prev, newCell]);
+
         const result = await executeCode(
-          blockScript, 
+          blockScript,
           (partial) => {
-            setCells(prev => prev.map(c => c.id === cellId ? { ...c, output: partial } : c));
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === cellId ? { ...c, output: partial } : c,
+              ),
+            );
           },
           (plotPoint) => {
-            setCells(prev => prev.map(c => c.id === cellId ? { ...c, plots: [...(c.plots || []), plotPoint] } : c));
-          }
+            setCells((prev) =>
+              prev.map((c) =>
+                c.id === cellId
+                  ? { ...c, plots: [...(c.plots || []), plotPoint] }
+                  : c,
+              ),
+            );
+          },
         );
-        
-        setCells(prev => prev.map(c => c.id === cellId ? { 
-          ...c, 
-          status: result.error ? 'error' : 'success', 
-          output: result.error || result.text 
-        } : c));
-        
+
+        setCells((prev) =>
+          prev.map((c) =>
+            c.id === cellId
+              ? {
+                  ...c,
+                  status: result.error ? "error" : "success",
+                  output: result.error || result.text,
+                }
+              : c,
+          ),
+        );
+
         // Parse deployment URL
         if (result.text && result.text.includes("[VML_DEPLOYMENT_URL]")) {
-           const urlMatch = result.text.match(/\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/);
-           if (urlMatch) setDeploymentUrl(urlMatch[1]);
+          const urlMatch = result.text.match(
+            /\[VML_DEPLOYMENT_URL\] (https:\/\/huggingface\.co\/[^\s]+)/,
+          );
+          if (urlMatch) setDeploymentUrl(urlMatch[1]);
         }
 
         if (result.error) break; // Stop the sequence if a block fails
       }
-      
     } catch (e) {
       console.error("Quantization Workflow Failed:", e);
     } finally {
@@ -921,7 +1055,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
 
     // Update output live
     const localResult = await executeCode(
-      cell.content, 
+      cell.content,
       (partial) => {
         setCells((prev) =>
           prev.map((c) => (c.id === id ? { ...c, output: partial } : c)),
@@ -937,9 +1071,11 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         plotPoint.timestamp = Date.now();
 
         setCells((prev) =>
-          prev.map((c) => (c.id === id ? { ...c, plots: [...(c.plots || []), plotPoint] } : c)),
+          prev.map((c) =>
+            c.id === id ? { ...c, plots: [...(c.plots || []), plotPoint] } : c,
+          ),
         );
-      }
+      },
     );
 
     setCells((prev) =>
@@ -1205,15 +1341,18 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         </div>
 
         <div className="flex items-center gap-2">
-
           <Button
             size="sm"
             variant="ghost"
             onClick={handleCopyAll}
             title="Copy entire notebook context for AI"
-            className={`transition-all duration-300 ${wasCopyAllClicked ? 'text-emerald-400 bg-emerald-500/10' : 'text-purple-400'}`}
+            className={`transition-all duration-300 ${wasCopyAllClicked ? "text-emerald-400 bg-emerald-500/10" : "text-purple-400"}`}
           >
-            {wasCopyAllClicked ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+            {wasCopyAllClicked ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <Copy size={16} />
+            )}
             <span className="ml-2 text-[10px] font-bold tracking-widest uppercase">
               {wasCopyAllClicked ? "COPIED" : "COPY ALL"}
             </span>
@@ -1296,50 +1435,60 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden relative w-full">
-        {activeView === 'chat' ? (
-          <ChatView 
+        {activeView === "chat" ? (
+          <ChatView
             selectedModel={chatSelectedModel}
             onModelChange={setChatSelectedModel}
           />
-        ) : activeView === 'knowledge' ? (
-          <KnowledgeLibrary onDistillComplete={(id) => {
-            setPreSelectedDataset(id);
-            setActiveView('workflow');
-          }} />
-        ) : activeView === 'workflow' ? (
+        ) : activeView === "knowledge" ? (
+          <KnowledgeLibrary
+            onDistillComplete={(id) => {
+              setPreSelectedDataset(id);
+              setActiveView("workflow");
+            }}
+          />
+        ) : activeView === "workflow" ? (
           <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">
             <div className="text-center space-y-4 max-w-2xl">
-              <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Model Production Center</h2>
-              <p className="text-sm text-white/40">Select your workflow to begin local optimization. Fine-tune for personality, or quantize for maximum local performance.</p>
+              <h2 className="text-3xl font-black text-white tracking-tighter uppercase">
+                Model Production Center
+              </h2>
+              <p className="text-sm text-white/40">
+                Select your workflow to begin local optimization. Fine-tune for
+                personality, or quantize for maximum local performance.
+              </p>
             </div>
-            
-            <WorkFlowSwitcher active={workflowMode} onChange={setWorkflowMode} />
-            
+
+            <WorkFlowSwitcher
+              active={workflowMode}
+              onChange={setWorkflowMode}
+            />
+
             <div className="w-full max-w-4xl bg-[#140F1D] border border-white/5 rounded-[32px] p-8 shadow-2xl relative group">
               <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
-              
-              {workflowMode === 'finetune' ? (
-                <FineTuningPanel 
-                  onStart={handleStartSFT} 
-                  isExecuting={isWorkflowExecuting} 
-                  systemInfo={systemInfo} 
+
+              {workflowMode === "finetune" ? (
+                <FineTuningPanel
+                  onStart={handleStartSFT}
+                  isExecuting={isWorkflowExecuting}
+                  systemInfo={systemInfo}
                   preSelectedDataset={preSelectedDataset}
                   onClearSelection={() => setPreSelectedDataset(null)}
                   deploymentUrl={deploymentUrl}
                   onTestInArena={() => {
                     // This logic is for GGUF usually, but if deployed as adapter we could select it too
                     // For now, let's assume conversion to GGUF happened or we jump to chat
-                    setActiveView('chat');
+                    setActiveView("chat");
                   }}
                 />
               ) : (
-                <QuantizationPanel 
-                  onStart={handleStartQuantization} 
-                  isExecuting={isWorkflowExecuting} 
+                <QuantizationPanel
+                  onStart={handleStartQuantization}
+                  isExecuting={isWorkflowExecuting}
                   deploymentUrl={deploymentUrl}
                   onTestInArena={(filename) => {
                     setChatSelectedModel(filename || workflowModelFilename);
-                    setActiveView('chat');
+                    setActiveView("chat");
                   }}
                 />
               )}
@@ -1350,6 +1499,67 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
             {/* Notebook Area */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8 transition-all duration-500">
               <div className="max-w-5xl mx-auto space-y-6">
+                {/* Active Training Session Header */}
+                {activeTrainingSession && (
+                  <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="bg-[#140F1D] border border-white/5 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 p-12 bg-amber-500/[0.03] blur-[60px] rounded-full group-hover:bg-amber-500/[0.06] transition-colors" />
+
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center relative">
+                          <Rocket
+                            size={20}
+                            className="text-amber-500 animate-bounce"
+                          />
+                          <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#140F1D] animate-pulse" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em]">
+                              Active Training Command
+                            </span>
+                            <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[8px] font-bold text-emerald-400 uppercase tracking-widest animate-pulse">
+                              Session Active
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-black text-white tracking-tight">
+                            {activeTrainingSession.modelId.split("/").pop()}
+                          </h3>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-8 pr-4">
+                        <div className="flex flex-col border-l border-white/5 pl-8">
+                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.2em] mb-1">
+                            Knowledge Source
+                          </span>
+                          <span className="text-xs font-black text-white/70 flex items-center gap-2">
+                            <Database size={10} className="text-purple-500" />
+                            {activeTrainingSession.datasetId.split("/").pop()}
+                          </span>
+                        </div>
+                        <div className="flex flex-col border-l border-white/5 pl-8">
+                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.2em] mb-1">
+                            Training Target
+                          </span>
+                          <span className="text-xs font-black text-white/70 flex items-center gap-2 uppercase tracking-widest">
+                            <Zap size={10} className="text-amber-500" />
+                            {activeTrainingSession.maxSteps} Steps
+                          </span>
+                        </div>
+                        <div className="flex flex-col border-l border-white/5 pl-8">
+                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.2em] mb-1">
+                            Platform Status
+                          </span>
+                          <span className="text-xs font-black text-emerald-500/80 flex items-center gap-2 uppercase tracking-widest">
+                            <Activity size={10} className="animate-pulse" />
+                            Optimizing
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Clarification Loop UI */}
                 {clarification && (
                   <div className="bg-indigo-900/20 border border-indigo-500/30 rounded-xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -1384,8 +1594,8 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                   <div className="flex flex-col items-center justify-center h-64 text-[#9480B3]">
                     <Sparkles size={48} className="mb-4 text-[#352554]" />
                     <p>
-                      Ladies and Gentlemen, you are not ready for this, Vibe Traning
-                      Agents. Type a prompt below.
+                      Ladies and Gentlemen, you are not ready for this, Vibe
+                      Traning Agents. Type a prompt below.
                     </p>
                   </div>
                 )}
@@ -1397,14 +1607,14 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                       <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
                     </div>
                     <div className="hidden group-hover:flex items-center gap-2 z-20">
-                      <button 
-                        onClick={() => addCell('code', 0)}
+                      <button
+                        onClick={() => addCell("code", 0)}
                         className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-purple-500/30 rounded-full text-[10px] font-bold text-purple-400 hover:bg-purple-600/20 transition-all shadow-lg"
                       >
                         <Plus size={10} /> CODE
                       </button>
-                      <button 
-                        onClick={() => addCell('markdown', 0)}
+                      <button
+                        onClick={() => addCell("markdown", 0)}
                         className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-indigo-500/30 rounded-full text-[10px] font-bold text-indigo-400 hover:bg-indigo-600/20 transition-all shadow-lg"
                       >
                         <Plus size={10} /> TEXT
@@ -1430,21 +1640,21 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                         metadata={cell.metadata}
                       />
                     </div>
-                    
+
                     {/* Intermediate Inserter */}
                     <div className="group relative flex justify-center h-4 my-[-8px] z-10">
                       <div className="absolute inset-0 flex items-center px-8 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-purple-500/30 to-transparent" />
                       </div>
                       <div className="hidden group-hover:flex items-center gap-2 z-20 pointer-events-auto">
-                        <button 
-                          onClick={() => addCell('code', idx + 1)}
+                        <button
+                          onClick={() => addCell("code", idx + 1)}
                           className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-purple-500/30 rounded-full text-[10px] font-bold text-purple-400 hover:bg-purple-500/40 transition-all shadow-xl"
                         >
                           <Plus size={10} /> CODE
                         </button>
-                        <button 
-                          onClick={() => addCell('markdown', idx + 1)}
+                        <button
+                          onClick={() => addCell("markdown", idx + 1)}
                           className="flex items-center gap-1.5 px-3 py-1 bg-[#140F1D] border border-indigo-500/30 rounded-full text-[10px] font-bold text-indigo-400 hover:bg-indigo-500/40 transition-all shadow-xl"
                         >
                           <Plus size={10} /> TEXT
@@ -1472,293 +1682,295 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
       </div>
 
       {/* Bottom Prompt Bar - Floating */}
-      {activeView === 'studio' && (
-      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
-        <div className="max-w-3xl mx-auto pointer-events-auto">
-          <div
-            className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-visible flex flex-col ${isGenerating || isAutoRunning ? "border-purple-500 shadow-purple-500/20" : "border-[#352554] hover:border-gray-500"}`}
-          >
-            {/* Mode Selector and Input Area */}
-            <div className="flex items-end p-2 gap-2">
-              {/* Quick actions menu */}
-              <div className="relative" ref={plusMenuRef}>
-                <button
-                  onClick={() => setIsPlusMenuOpen((prev) => !prev)}
-                  disabled={isGenerating || isAutoRunning}
-                  className={`mb-2 h-9 w-9 flex items-center justify-center rounded-full border transition ${
-                    isPlusMenuOpen
-                      ? "border-purple-400 text-purple-200"
-                      : "border-white/20 text-slate-300 hover:border-purple-500 hover:text-purple-200"
-                  } bg-[#140A1C]`}
-                >
-                  <Plus size={18} />
-                </button>
+      {activeView === "studio" && (
+        <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0B090F] via-[#0B090F] to-transparent z-20 pointer-events-none">
+          <div className="max-w-3xl mx-auto pointer-events-auto">
+            <div
+              className={`relative bg-[#1D152A] border transition-colors duration-300 rounded-xl shadow-lg overflow-visible flex flex-col ${isGenerating || isAutoRunning ? "border-purple-500 shadow-purple-500/20" : "border-[#352554] hover:border-gray-500"}`}
+            >
+              {/* Mode Selector and Input Area */}
+              <div className="flex items-end p-2 gap-2">
+                {/* Quick actions menu */}
+                <div className="relative" ref={plusMenuRef}>
+                  <button
+                    onClick={() => setIsPlusMenuOpen((prev) => !prev)}
+                    disabled={isGenerating || isAutoRunning}
+                    className={`mb-2 h-9 w-9 flex items-center justify-center rounded-full border transition ${
+                      isPlusMenuOpen
+                        ? "border-purple-400 text-purple-200"
+                        : "border-white/20 text-slate-300 hover:border-purple-500 hover:text-purple-200"
+                    } bg-[#140A1C]`}
+                  >
+                    <Plus size={18} />
+                  </button>
 
-                {isPlusMenuOpen && (
-                  <div className="absolute bottom-full left-0 z-30 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#08050D] shadow-2xl">
-                    <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
-                      <div className="flex items-center justify-between">
-                        <span>Quick actions</span>
-                        <span className="text-[10px] text-purple-300">
-                          {activeMenuCategory === "skills"
-                            ? "Skills"
-                            : "Connectors"}
-                        </span>
+                  {isPlusMenuOpen && (
+                    <div className="absolute bottom-full left-0 z-30 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#08050D] shadow-2xl">
+                      <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
+                        <div className="flex items-center justify-between">
+                          <span>Quick actions</span>
+                          <span className="text-[10px] text-purple-300">
+                            {activeMenuCategory === "skills"
+                              ? "Skills"
+                              : "Connectors"}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex gap-3 border-t border-white/5 px-4 pb-4 pt-2">
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => setActiveMenuCategory("skills")}
-                          className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
-                            activeMenuCategory === "skills"
-                              ? "border border-purple-400/60 bg-purple-500/10 text-white"
-                              : "border border-white/10 text-slate-300 hover:border-white/40"
-                          }`}
-                        >
-                          Skills
-                        </button>
-                        <button
-                          onClick={() => setActiveMenuCategory("connectors")}
-                          className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
-                            activeMenuCategory === "connectors"
-                              ? "border border-purple-400/60 bg-purple-500/10 text-white"
-                              : "border border-white/10 text-slate-300 hover:border-white/40"
-                          }`}
-                        >
-                          Connectors
-                        </button>
-                      </div>
-                      <div className="flex-1 space-y-2">
-                        {activeMenuCategory === "skills" ? (
-                          skillPreview.length ? (
-                            skillPreview.map((skill) => (
+                      <div className="flex gap-3 border-t border-white/5 px-4 pb-4 pt-2">
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => setActiveMenuCategory("skills")}
+                            className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                              activeMenuCategory === "skills"
+                                ? "border border-purple-400/60 bg-purple-500/10 text-white"
+                                : "border border-white/10 text-slate-300 hover:border-white/40"
+                            }`}
+                          >
+                            Skills
+                          </button>
+                          <button
+                            onClick={() => setActiveMenuCategory("connectors")}
+                            className={`rounded-2xl px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition ${
+                              activeMenuCategory === "connectors"
+                                ? "border border-purple-400/60 bg-purple-500/10 text-white"
+                                : "border border-white/10 text-slate-300 hover:border-white/40"
+                            }`}
+                          >
+                            Connectors
+                          </button>
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          {activeMenuCategory === "skills" ? (
+                            skillPreview.length ? (
+                              skillPreview.map((skill) => (
+                                <div
+                                  key={skill.name}
+                                  className="rounded-2xl border border-white/5 bg-[#0F0B16]/90 p-3 text-xs text-slate-200"
+                                  onClick={() => handleSelectSkill(skill.name)}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-white">
+                                        {skill.name}
+                                      </p>
+                                      <p className="text-[11px] text-slate-400">
+                                        {skill.summary || "Personal skill"}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleToggleSkillAutoActivate(
+                                          skill.name,
+                                        );
+                                      }}
+                                      className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
+                                        skill.autoActivate
+                                          ? "border-emerald-400 text-emerald-300"
+                                          : "border-white/20 text-white/70"
+                                      }`}
+                                    >
+                                      Auto {skill.autoActivate ? "On" : "Off"}
+                                    </button>
+                                  </div>
+                                  <div className="mt-3 flex items-center justify-between text-[10px]">
+                                    <button
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleViewSkillInstructions(skill.name);
+                                      }}
+                                      className="text-slate-300 hover:text-white"
+                                    >
+                                      {skill.showInstructions
+                                        ? "Hide"
+                                        : "View instructions"}
+                                    </button>
+                                    <span className="text-[10px] text-slate-500">
+                                      SKILLS.md
+                                    </span>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-[11px] text-slate-400">
+                                No skills loaded yet.
+                              </p>
+                            )
+                          ) : connectorPreview.length ? (
+                            connectorPreview.map((connector) => (
                               <div
-                                key={skill.name}
+                                key={connector.id}
                                 className="rounded-2xl border border-white/5 bg-[#0F0B16]/90 p-3 text-xs text-slate-200"
-                                onClick={() => handleSelectSkill(skill.name)}
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
                                     <p className="text-sm font-semibold text-white">
-                                      {skill.name}
+                                      {connector.label}
                                     </p>
                                     <p className="text-[11px] text-slate-400">
-                                      {skill.summary || "Personal skill"}
+                                      {connector.description}
                                     </p>
                                   </div>
                                   <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleToggleSkillAutoActivate(skill.name);
-                                    }}
+                                    onClick={() =>
+                                      handleToggleConnector(connector.id)
+                                    }
                                     className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
-                                      skill.autoActivate
+                                      connector.enabled
                                         ? "border-emerald-400 text-emerald-300"
                                         : "border-white/20 text-white/70"
                                     }`}
                                   >
-                                    Auto {skill.autoActivate ? "On" : "Off"}
+                                    {connector.enabled ? "On" : "Off"}
                                   </button>
                                 </div>
-                                <div className="mt-3 flex items-center justify-between text-[10px]">
-                                  <button
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      handleViewSkillInstructions(skill.name);
-                                    }}
-                                    className="text-slate-300 hover:text-white"
-                                  >
-                                    {skill.showInstructions
-                                      ? "Hide"
-                                      : "View instructions"}
-                                  </button>
-                                  <span className="text-[10px] text-slate-500">
-                                    SKILLS.md
+                                <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
+                                  <span className="font-semibold text-slate-200">
+                                    {connector.status || "Idle"}
                                   </span>
+                                  <span>{connector.statusMessage}</span>
                                 </div>
+                                <button
+                                  onClick={() =>
+                                    handleTestConnector(connector.id)
+                                  }
+                                  className="mt-2 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-white/40 hover:text-white"
+                                >
+                                  Test
+                                </button>
                               </div>
                             ))
                           ) : (
                             <p className="text-[11px] text-slate-400">
-                              No skills loaded yet.
+                              No connectors configured.
                             </p>
-                          )
-                        ) : connectorPreview.length ? (
-                          connectorPreview.map((connector) => (
-                            <div
-                              key={connector.id}
-                              className="rounded-2xl border border-white/5 bg-[#0F0B16]/90 p-3 text-xs text-slate-200"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-semibold text-white">
-                                    {connector.label}
-                                  </p>
-                                  <p className="text-[11px] text-slate-400">
-                                    {connector.description}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() =>
-                                    handleToggleConnector(connector.id)
-                                  }
-                                  className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase transition ${
-                                    connector.enabled
-                                      ? "border-emerald-400 text-emerald-300"
-                                      : "border-white/20 text-white/70"
-                                  }`}
-                                >
-                                  {connector.enabled ? "On" : "Off"}
-                                </button>
-                              </div>
-                              <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
-                                <span className="font-semibold text-slate-200">
-                                  {connector.status || "Idle"}
-                                </span>
-                                <span>{connector.statusMessage}</span>
-                              </div>
-                              <button
-                                onClick={() =>
-                                  handleTestConnector(connector.id)
-                                }
-                                className="mt-2 rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wider text-slate-300 transition hover:border-white/40 hover:text-white"
-                              >
-                                Test
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-[11px] text-slate-400">
-                            No connectors configured.
-                          </p>
-                        )}
+                          )}
+                        </div>
+                      </div>
+                      <div className="border-t border-white/5 px-4 py-3">
+                        <button
+                          onClick={() => openManagePanel("skills")}
+                          className="w-full rounded-2xl border border-white/10 bg-purple-600/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:border-purple-400/80 hover:bg-purple-500/20"
+                        >
+                          Manage skills & connectors
+                        </button>
                       </div>
                     </div>
-                    <div className="border-t border-white/5 px-4 py-3">
-                      <button
-                        onClick={() => openManagePanel("skills")}
-                        className="w-full rounded-2xl border border-white/10 bg-purple-600/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:border-purple-400/80 hover:bg-purple-500/20"
-                      >
-                        Manage skills & connectors
-                      </button>
+                  )}
+                </div>
+
+                {slashMenuOpen && (
+                  <div
+                    ref={slashMenuRef}
+                    className="absolute left-4 bottom-full mb-3 z-40 w-[320px] rounded-2xl border border-white/10 bg-[#09040F] shadow-2xl"
+                  >
+                    <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
+                      Slash commands
+                    </div>
+                    <div className="max-h-56 overflow-y-auto px-2 pb-2 text-sm text-slate-200">
+                      {slashSkillOptions.length ? (
+                        slashSkillOptions.map((skill, index) => (
+                          <button
+                            key={skill.name}
+                            onClick={() => handleSlashSelection(skill.name)}
+                            onMouseEnter={() => setSlashHighlight(index)}
+                            className={`w-full rounded-xl px-3 py-2 text-left transition ${
+                              index === slashHighlight
+                                ? "bg-purple-500/20 text-white"
+                                : "text-slate-200 hover:bg-white/5"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-[13px]">
+                              <span>{skill.name}</span>
+                              <span className="text-[10px] uppercase text-slate-400">
+                                Skill
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-slate-400">
+                              {skill.summary || "Personal skill"}
+                            </p>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-2 text-xs text-slate-500">
+                          Type to filter skills…
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
-              </div>
-
-              {slashMenuOpen && (
-                <div
-                  ref={slashMenuRef}
-                  className="absolute left-4 bottom-full mb-3 z-40 w-[320px] rounded-2xl border border-white/10 bg-[#09040F] shadow-2xl"
-                >
-                  <div className="px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
-                    Slash commands
-                  </div>
-                  <div className="max-h-56 overflow-y-auto px-2 pb-2 text-sm text-slate-200">
-                    {slashSkillOptions.length ? (
-                      slashSkillOptions.map((skill, index) => (
-                        <button
-                          key={skill.name}
-                          onClick={() => handleSlashSelection(skill.name)}
-                          onMouseEnter={() => setSlashHighlight(index)}
-                          className={`w-full rounded-xl px-3 py-2 text-left transition ${
-                            index === slashHighlight
-                              ? "bg-purple-500/20 text-white"
-                              : "text-slate-200 hover:bg-white/5"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-[13px]">
-                            <span>{skill.name}</span>
-                            <span className="text-[10px] uppercase text-slate-400">
-                              Skill
-                            </span>
-                          </div>
-                          <p className="text-[12px] text-slate-400">
-                            {skill.summary || "Personal skill"}
-                          </p>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-3 py-2 text-xs text-slate-500">
-                        Type to filter skills…
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-              {/* Mode Toggle Button */}
-              <button
-                onClick={() =>
-                  setMode((prev) => (prev === "agent" ? "plan" : "agent"))
-                }
-                disabled={isGenerating || isAutoRunning}
-                className={`mb-2 ml-2 p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-medium border
+                {/* Mode Toggle Button */}
+                <button
+                  onClick={() =>
+                    setMode((prev) => (prev === "agent" ? "plan" : "agent"))
+                  }
+                  disabled={isGenerating || isAutoRunning}
+                  className={`mb-2 ml-2 p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-medium border
                             ${
                               mode === "agent"
                                 ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20"
                                 : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
                             }
                         `}
-              >
-                {mode === "agent" ? (
-                  <>
-                    <Rocket size={14} />
-                    <span className="hidden sm:inline">Agent</span>
-                  </>
-                ) : (
-                  <>
-                    <Map size={14} />
-                    <span className="hidden sm:inline">Plan</span>
-                  </>
-                )}
-              </button>
+                >
+                  {mode === "agent" ? (
+                    <>
+                      <Rocket size={14} />
+                      <span className="hidden sm:inline">Agent</span>
+                    </>
+                  ) : (
+                    <>
+                      <Map size={14} />
+                      <span className="hidden sm:inline">Plan</span>
+                    </>
+                  )}
+                </button>
 
-              <textarea
-                value={prompt}
-                onChange={(e) => handlePromptChange(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  isGenerating || isAutoRunning
-                    ? "VML Agent is running..."
-                    : mode === "agent"
-                    ? "How can VML Agent help you today?"
-                    : "How can VML Planner help you today?"
-                }
-                className="flex-1 bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
-                rows={1}
-                style={{ minHeight: "50px" }}
-                disabled={isGenerating || isAutoRunning}
-              />
+                <textarea
+                  value={prompt}
+                  onChange={(e) => handlePromptChange(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    isGenerating || isAutoRunning
+                      ? "VML Agent is running..."
+                      : mode === "agent"
+                        ? "How can VML Agent help you today?"
+                        : "How can VML Planner help you today?"
+                  }
+                  className="flex-1 bg-transparent text-white placeholder-gray-500 text-base p-3 focus:outline-none resize-none max-h-40"
+                  rows={1}
+                  style={{ minHeight: "50px" }}
+                  disabled={isGenerating || isAutoRunning}
+                />
 
-              <button
-                onClick={isGenerating ? handleStop : handleSubmitPrompt}
-                disabled={(!prompt.trim() && !isGenerating) || isAutoRunning}
-                className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
-                  (prompt.trim() || isGenerating) && !isAutoRunning
-                    ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
-                    : "bg-[#1a1a1a] text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                {isGenerating ? (
-                  <Square size={18} fill="currentColor" />
-                ) : (
-                  <Send size={18} />
-                )}
-              </button>
-            </div>
-
-            {/* Loading Progress Bar */}
-            {(isGenerating || isAutoRunning) && (
-              <div className="absolute bottom-2 left-4 right-4 h-0.5 bg-white/5 overflow-hidden rounded-full pointer-events-none">
-                <div
-                  className={`h-full ${isGenerating ? "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"} animate-progress-indeterminate`}
-                ></div>
+                <button
+                  onClick={isGenerating ? handleStop : handleSubmitPrompt}
+                  disabled={(!prompt.trim() && !isGenerating) || isAutoRunning}
+                  className={`mb-2 mr-2 p-2 rounded-lg transition-all ${
+                    (prompt.trim() || isGenerating) && !isAutoRunning
+                      ? "bg-purple-600 text-white hover:bg-purple-700 shadow-sm"
+                      : "bg-[#1a1a1a] text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {isGenerating ? (
+                    <Square size={18} fill="currentColor" />
+                  ) : (
+                    <Send size={18} />
+                  )}
+                </button>
               </div>
-            )}
+
+              {/* Loading Progress Bar */}
+              {(isGenerating || isAutoRunning) && (
+                <div className="absolute bottom-2 left-4 right-4 h-0.5 bg-white/5 overflow-hidden rounded-full pointer-events-none">
+                  <div
+                    className={`h-full ${isGenerating ? "bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]" : "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"} animate-progress-indeterminate`}
+                  ></div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
       )}
       <ManageSkillsPanel
         visible={showManageSkills}
