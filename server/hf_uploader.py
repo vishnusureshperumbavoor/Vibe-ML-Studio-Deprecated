@@ -117,6 +117,90 @@ def upload_to_hf(path: str, repo_slug: str, base_model: str = "Unknown", dataset
         print(f"Upload failed: {e}")
         return False
 
+def create_space_for_model(repo_slug: str, base_model: str, adapter_repo_id: str):
+    """
+    Creates a Gradio Space on Hugging Face for the uploaded model.
+    """
+    load_dotenv()
+    token = os.getenv("HF_TOKEN")
+    if not token:
+        print("Error: HF_TOKEN not found. Space creation aborted.")
+        return False
+
+    api = HfApi(token=token)
+    try:
+        user_info = api.whoami()
+        username = user_info['name']
+    except Exception as e:
+        print(f"Authentication failed: {e}")
+        return False
+
+    space_repo_id = f"{username}/{repo_slug.lower().replace('/', '_')}-assistant"
+    
+    print(f"Creating Hugging Face Space: {space_repo_id}...")
+    try:
+        create_repo(
+            repo_id=space_repo_id, 
+            token=token, 
+            repo_type="space", 
+            space_sdk="gradio", 
+            private=False, 
+            exist_ok=True
+        )
+        
+        # Generate app.py content
+        app_content = f'''
+import gradio as gr
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from peft import PeftModel
+
+model_id = "{base_model}"
+adapter_id = "{adapter_repo_id}"
+
+print("Loading model and adapter...")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, device_map="cpu")
+model = PeftModel.from_pretrained(base_model, adapter_id)
+print("Model ready!")
+
+def chat(message, history):
+    prompt = f"<|im_start|>user\\n{{message}}<|im_end|>\\n<|im_start|>assistant\\n"
+    inputs = tokenizer(prompt, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.7, top_p=0.9, eos_token_id=tokenizer.eos_token_id)
+    response = tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
+    return response
+
+demo = gr.ChatInterface(fn=chat, title="VML AI Assistant: {repo_slug}", description="Fine-tuned model deployed via Vibe ML Studio.")
+if __name__ == "__main__":
+    demo.launch()
+'''
+        # Generate requirements.txt content
+        req_content = "torch\ntransformers\npeft\ngradio\naccelerate\nsentencepiece\n"
+
+        # Upload files
+        api.upload_file(
+            path_or_fileobj=app_content.encode("utf-8"),
+            path_in_repo="app.py",
+            repo_id=space_repo_id,
+            repo_type="space"
+        )
+        api.upload_file(
+            path_or_fileobj=req_content.encode("utf-8"),
+            path_in_repo="requirements.txt",
+            repo_id=space_repo_id,
+            repo_type="space"
+        )
+        
+        space_url = f"https://huggingface.co/spaces/{space_repo_id}"
+        print(f"SPACE DEPLOYED SUCCESSFULLY!")
+        print(f"[VML_SPACE_URL] {space_url}")
+        return True
+    except Exception as e:
+        print(f"Space creation failed: {e}")
+        return False
+
 if __name__ == "__main__":
     # Args: path, repo_slug, base_model, dataset_id
     path = sys.argv[1] if len(sys.argv) > 1 else None
