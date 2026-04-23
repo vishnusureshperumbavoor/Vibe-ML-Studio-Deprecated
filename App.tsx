@@ -1348,25 +1348,6 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleCopyAll}
-            title="Copy entire notebook context for AI"
-            className={`transition-all duration-300 ${wasCopyAllClicked ? "text-emerald-400 bg-emerald-500/10" : "text-purple-400"}`}
-          >
-            {wasCopyAllClicked ? (
-              <CheckCircle2 size={16} />
-            ) : (
-              <Copy size={16} />
-            )}
-            <span className="ml-2 text-[10px] font-bold tracking-widest uppercase">
-              {wasCopyAllClicked ? "COPIED" : "COPY ALL"}
-            </span>
-          </Button>
-
-          <div className="h-4 w-px bg-[#352554] mx-2"></div>
-
           {/* View Switcher */}
           <div className="flex bg-[#0B090F] p-1 rounded-xl border border-[#352554] mr-2">
             <Button
@@ -1512,8 +1493,24 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
         ) : (
           <>
             {/* Notebook Area */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden pt-20 pb-40 px-4 md:px-8 transition-all duration-500">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden pt-6 pb-40 px-4 md:px-8 transition-all duration-500">
               <div className="max-w-5xl mx-auto space-y-6">
+                
+                <div className="sticky top-0 z-30 flex justify-end pb-4 -mx-4 px-4 md:-mx-8 md:px-8 bg-gradient-to-b from-[#0B090F] via-[#0B090F] to-transparent pt-4 -mt-4 pointer-events-none">
+                  <button
+                    onClick={handleCopyAll}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-2xl border transition-all duration-300 pointer-events-auto shadow-2xl backdrop-blur-md ${
+                      wasCopyAllClicked 
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-emerald-500/10" 
+                        : "bg-[#140F1D]/80 border-white/10 text-white/40 hover:bg-[#140F1D] hover:border-white/20 hover:text-white"
+                    }`}
+                  >
+                    {wasCopyAllClicked ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                    <span className="text-[10px] font-black tracking-widest uppercase">
+                      {wasCopyAllClicked ? "COPIED TO CLIPBOARD" : "COPY NOTEBOOK CONTEXT"}
+                    </span>
+                  </button>
+                </div>
                 {/* Active Training Session Header */}
                 {activeTrainingSession && (
                   <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-700">
@@ -1531,10 +1528,7 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black text-amber-500 uppercase tracking-[0.2em]">
-                              Active Training Command
-                            </span>
-                            <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[8px] font-bold text-emerald-400 uppercase tracking-widest animate-pulse">
-                              Session Active
+                              Active Training Base Model
                             </span>
                           </div>
                           <h3 className="text-xl font-black text-white tracking-tight">
@@ -1560,15 +1554,6 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                           <span className="text-xs font-black text-white/70 flex items-center gap-2 uppercase tracking-widest">
                             <Zap size={10} className="text-amber-500" />
                             {activeTrainingSession.maxSteps} Steps
-                          </span>
-                        </div>
-                        <div className="flex flex-col border-l border-white/5 pl-8">
-                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-[0.2em] mb-1">
-                            Platform Status
-                          </span>
-                          <span className="text-xs font-black text-emerald-500/80 flex items-center gap-2 uppercase tracking-widest">
-                            <Activity size={10} className="animate-pulse" />
-                            Optimizing
                           </span>
                         </div>
                       </div>

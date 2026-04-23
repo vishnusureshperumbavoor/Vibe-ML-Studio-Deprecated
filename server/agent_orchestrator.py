@@ -299,12 +299,12 @@ if os.path.exists(local_path):
     print(f"📦 Found local dataset: {{local_path}}")
     dataset = load_dataset("json", data_files=local_path, split="train[:500]")
 else:
-    if "{dataset_id}".endswith((".jsonl", ".json", ".csv")):
+    if {repr(dataset_id)}.endswith((".jsonl", ".json", ".csv")):
         print(f"❌ Local file not found at {{local_path}}. Since it has a file extension, skipping HF Hub fallback.")
         raise FileNotFoundError(f"Local dataset {{local_path}} not found.")
     
-    print(f"🌐 Local dataset not found. Attempting to fetch from Hugging Face: {{dataset_id}}")
-    dataset = load_dataset("{dataset_id}", split="train[:500]")
+    print(f"🌐 Local dataset not found. Attempting to fetch from Hugging Face: {repr(dataset_id)}")
+    dataset = load_dataset({repr(dataset_id)}, split="train[:500]")
 
 def get_universal_format(example):
     input_keys = ["instruction", "prompt", "query", "question", "input"]
@@ -421,10 +421,10 @@ try:
     
     # Conditional logic: Only deploy if it's a real training run (>= 300 steps)
     if sft_config.max_steps >= 300:
-        print("🚀 [VML AGENT] Training target met (>= 300 steps). Initiating Autonomous Deployment...")
+        print("[VML AGENT] Training target met (>= 300 steps). Initiating Autonomous Deployment...")
         
         # 1. Upload to Hugging Face
-        success = upload_to_hf(output_dir, "{model_slug}", "{base_model}", "{dataset_id}")
+        success = upload_to_hf(output_dir, {repr(model_slug)}, {repr(base_model)}, {repr(dataset_id)})
         
         if success:
             # 2. Resolve Repo ID for Space
@@ -433,19 +433,19 @@ try:
             repo_id = f"{{username}}/{model_slug.lower().replace('/', '_')}-vml"
             
             # 3. Create Space
-            create_space_for_model("{model_slug}", "{base_model}", repo_id)
+            create_space_for_model({repr(model_slug)}, {repr(base_model)}, repo_id)
         else:
-            print("❌ Deployment failed.")
+            print("Deployment failed.")
     else:
-        print(f"ℹ️ [VML AGENT] Training run of {{sft_config.max_steps}} steps is below deployment threshold (300). Skipping HF upload.")
+        print(f"[VML AGENT] Training run of {{sft_config.max_steps}} steps is below deployment threshold (300). Skipping HF upload.")
 except ImportError:
-    print("⚠️ hf_uploader.py not found in server/. Skipping automated deployment.")
+    print("hf_uploader.py not found in server/. Skipping automated deployment.")
 except Exception as e:
-    print(f"❌ Autonomous deployment agent failed: {{e}}")
+    print(f"Autonomous deployment agent failed: {{e}}")
 """,
             f"""# Block 7: VML Agentic Handoff
 import json
-vml_handoff = {{"vml_type": "HANDOFF_SFT_COMPLETE", "adapter_dir": output_dir, "model_slug": "{model_slug}", "base_model": "{base_model}", "dataset_id": "{dataset_id}"}}
+vml_handoff = {{"vml_type": "HANDOFF_SFT_COMPLETE", "adapter_dir": output_dir, "model_slug": {repr(model_slug)}, "base_model": {repr(base_model)}, "dataset_id": {repr(dataset_id)}}}
 print(f"[VML_HANDOFF] {{json.dumps(vml_handoff)}}")
 """
         ]
