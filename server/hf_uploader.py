@@ -56,7 +56,7 @@ def upload_to_hf(path: str, repo_slug: str, base_model: str = "Unknown", dataset
     load_dotenv()
     token = os.getenv("HF_TOKEN")
     if not token:
-        print("❌ Error: HF_TOKEN not found. Deployment aborted.")
+        print("Error: HF_TOKEN not found. Deployment aborted.")
         return False
 
     api = HfApi(token=token)
@@ -65,24 +65,24 @@ def upload_to_hf(path: str, repo_slug: str, base_model: str = "Unknown", dataset
         user_info = api.whoami()
         username = user_info['name']
     except Exception as e:
-        print(f"❌ Authentication failed: {e}")
+        print(f"Authentication failed: {e}")
         return False
 
     repo_id = f"{username}/{repo_slug.lower().replace('/', '_')}-vml"
     
-    print(f"🔄 Preparing repository: {repo_id}...")
+    print(f"Preparing repository: {repo_id}...")
     try:
         create_repo(repo_id=repo_id, token=token, private=False, exist_ok=True, repo_type="model")
     except Exception as e:
-        print(f"⚠️ Repo access issue: {e}")
+        print(f"Repo access issue: {e}")
 
     # Generate README
-    print("📝 Generating Model Card (README.md)...")
+    print("Generating Model Card (README.md)...")
     readme_content = generate_model_card(path, repo_id, base_model, dataset_id)
 
     try:
         if os.path.isdir(path):
-            print(f"📂 Uploading folder and README to HF...")
+            print(f"Uploading folder and README to HF...")
             api.upload_folder(
                 folder_path=path,
                 repo_id=repo_id,
@@ -90,7 +90,7 @@ def upload_to_hf(path: str, repo_slug: str, base_model: str = "Unknown", dataset
                 commit_message=f"VML Build: {repo_slug}"
             )
         else:
-            print(f"📄 Uploading model file and auto-generated README...")
+            print(f"Uploading model file and auto-generated README...")
             # Upload the main file
             api.upload_file(
                 path_or_fileobj=path,
@@ -110,11 +110,11 @@ def upload_to_hf(path: str, repo_slug: str, base_model: str = "Unknown", dataset
             os.remove(temp_readme)
             
         final_url = f"https://huggingface.co/{repo_id}"
-        print(f"✅ DEPLOYMENT SUCCESSFUL!")
+        print(f"DEPLOYMENT SUCCESSFUL!")
         print(f"[VML_DEPLOYMENT_URL] {final_url}")
         return True
     except Exception as e:
-        print(f"❌ Upload failed: {e}")
+        print(f"Upload failed: {e}")
         return False
 
 if __name__ == "__main__":

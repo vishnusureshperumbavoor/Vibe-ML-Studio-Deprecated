@@ -207,6 +207,15 @@ async def handle_call_tool(
         dataset_name_part = dataset_id.split('/')[-1].lower().replace('.', '-')
         model_slug = f"{model_name_part}-{dataset_name_part}-instruct-vml1"
         
+        # Architecture detection for GGUF
+        gguf_arch = "llama"
+        if "qwen" in base_model.lower():
+            gguf_arch = "qwen2"
+        elif "gemma" in base_model.lower():
+            gguf_arch = "gemma2" if "gemma-2" in base_model.lower() else "gemma"
+        elif "mistral" in base_model.lower():
+            gguf_arch = "mistral"
+        
         # Dynamic path resolution: Detect if we are in 'server/' or project root
         cwd = os.getcwd()
         base_path = cwd if os.path.basename(cwd) == "server" else os.path.join(cwd, "server")
@@ -303,7 +312,7 @@ def get_universal_format(example):
     instr = next((example[k] for k in input_keys if k in example), "")
     out = next((example[k] for k in output_keys if k in example), "")
     context = example.get("input", "") if "instruction" in example else ""
-    return {{"text": f"{{instr}}\\n{{context}}\\n{{out}}"}}
+    return {{"text": f"### Instruction:\\n{{instr}}\\n\\n### Input:\\n{{context}}\\n\\n### Response:\\n{{out}}"}}
 
 print("🛠️ Mapping dataset to instructions...")
 dataset = dataset.map(get_universal_format)
@@ -326,10 +335,10 @@ sft_config = SFTConfig(
     output_dir=output_dir,
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
-    learning_rate=2e-4,
-    num_train_epochs={epochs},
+    learning_rate=5e-4,
+    num_train_epochs=15,
     logging_steps=1,
-    max_steps=20,
+    max_steps=300,
     report_to="none",
     save_strategy="no",
     dataset_text_field="text",
@@ -367,7 +376,7 @@ def convert(adapter_path, output_path):
     with open(os.path.join(adapter_path, "adapter_config.json"), "r") as f: cfg = json.load(f)
     w_path = os.path.join(adapter_path, "adapter_model.safetensors")
     weights = load_file(w_path) if os.path.exists(w_path) else torch.load(os.path.join(adapter_path, "adapter_model.bin"), map_location="cpu")
-    writer = gguf.GGUFWriter(output_path, "llama")
+    writer = gguf.GGUFWriter(output_path, "{gguf_arch}")
     writer.add_string("general.type", "adapter")
     writer.add_string("adapter.type", "lora")
     writer.add_float32("adapter.lora.alpha", float(cfg.get("lora_alpha", 16.0)))
