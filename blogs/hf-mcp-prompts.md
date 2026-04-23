@@ -1,1 +1,0 @@
-Use the native model_search tool to find the top 5 medical image segmentation models.

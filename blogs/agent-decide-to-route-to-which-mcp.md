@@ -1,4 +1,0 @@
-The agent decides purely on the tool names/descriptions it sees in the system prompt, not on literal keywords in the user sentence. If both Hugging Face and Kaggle expose tools named dataset_search/get_dataset_info, the LLM might pick either unless you bias it.
-To avoid confusion, explicitly teach the agent in your master prompt that “dataset metadata requests should be satisfied by the Kaggle dataset tools; Hugging Face tools are for models/spaces/etc.” That way — even if the user just says “get dataset info” — the model learns that the best match is the Kaggle tool in the tool list.
-You can also peek at the tool names when prompting and add a short clarifier (e.g., “Use Kaggle’s dataset metadata tool for this request”) or let the user wrap the call with <tool_use><name>kaggle_get_dataset_info</name>…</tool_use> whenever you want to force a backend.
-So i should assign each MCP's for each tasks.

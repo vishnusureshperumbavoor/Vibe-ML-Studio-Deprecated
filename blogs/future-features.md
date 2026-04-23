@@ -1,5 +1,3 @@
-Connector management dashboard – Right now getDefaultConnectorConfigs seeds Hugging Face/Kaggle/Roboflow endpoints in services/vmlAgent.ts:44; add UI for users to register, test, and save MCP bridges (with credential storage) so non-technical folks can extend the tool set without touching code.
-Tool/action history & replay – Since every cell update and tool result gets pushed through process and dispatchTool (see services/vmlAgent.ts:78 onward), persist those events in a searchable log so you can replay a session, diagnose mistakes, or let the assistant “undo”/“redo” previous actions.
-Skill marketplace/bundles – You already hit /list_skills and /read_file for skills (see toolListSkills/toolReadFile at services/vmlAgent.ts:155/167); expose that as an in-app gallery with metadata, ratings, and install buttons so users can discover/share new assistants without leaving the studio.
-Notebook collaboration + session states – Cells (CellData) already carry statuses and incremental outputs; layer on shared workspaces with live cursors, cell locking, and resumable checkpoints so teams can collaborate on a single experiment while the agent tracks progress.
-Observability & guardrails – Instrument the loop around callKimi (around services/vmlAgent.ts:80) to surface latency, rate-limit warnings, and explainable tool picks; combine that with automated safety suggestions (e.g., flagging infinite loops in generated code) to keep workflows robust.
+Benchmaxxing agents  
+CoT agents  
+MoE agents  
