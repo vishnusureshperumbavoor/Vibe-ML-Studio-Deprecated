@@ -455,8 +455,9 @@ async def list_local_datasets():
         
     for f in os.listdir(DATASETS_DIR):
         if f.endswith(".jsonl"):
-            # example: collection_distilled_12345.jsonl -> collection
-            display_name = f.split("_distilled_")[0]
+            # example: collection_persona_12345.jsonl -> extract collection
+            # Logic: split by underscore and take the first part
+            display_name = f.split("_")[0]
             
             # Check file size
             try:

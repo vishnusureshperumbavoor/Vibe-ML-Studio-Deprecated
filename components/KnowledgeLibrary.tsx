@@ -18,7 +18,13 @@ import {
 } from 'lucide-react';
 import { Button } from './Button';
 
-export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => void }> = ({ onDistillComplete }) => {
+export function KnowledgeLibrary({ onDistillComplete, distillStatus, setDistillStatus, showDistillUI, setShowDistillUI }: { 
+  onDistillComplete?: (datasetId: string) => void,
+  distillStatus: any,
+  setDistillStatus: (s: any) => void,
+  showDistillUI: boolean,
+  setShowDistillUI: (v: boolean) => void
+}) {
   const [collections, setCollections] = useState<any[]>([]);
   const [totalStorage, setTotalStorage] = useState<number>(0);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
@@ -35,8 +41,6 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
 
   const [isMining, setIsMining] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [distillStatus, setDistillStatus] = useState<any>({ step: 'idle', progress: 0, current_task: '' });
-  const [showDistillUI, setShowDistillUI] = useState(false);
   const [miningStep, setMiningStep] = useState<number>(0);
   const [statusMsg, setStatusMsg] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [sourceHistory, setSourceHistory] = useState<string[]>([]);
@@ -44,41 +48,9 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
   const [newCollectionName, setNewCollectionName] = useState('');
   const newNameRef = React.useRef<HTMLInputElement>(null);
   const [localDatasets, setLocalDatasets] = useState<any[]>([]);
-  const [distillPersona, setDistillPersona] = useState('Standard Expert');
-  const [personaSearch, setPersonaSearch] = useState('');
-  const [showPersonaMenu, setShowPersonaMenu] = useState(false);
-  const personaRef = React.useRef<HTMLDivElement>(null);
+  // Persistent state now passed as props
+  const [distillPersona, setDistillPersona] = useState('Generic');
 
-  const personaOptions = [
-    "Standard Expert",
-    "HR Policy Specialist",
-    "Financial Auditor",
-    "Marketing Strategist",
-    "Sales & Outreach Consultant",
-    "Product Strategy Manager",
-    "Radiologist",
-    "Cardiologist",
-    "ECG Specialist",
-    "Pathologist",
-    "Neurologist",
-    "Endoscopiologist",
-    "Medical Research Lead",
-    "Clinical Data Analyst"
-  ];
-
-  const filteredPersonas = personaOptions.filter(p => 
-    p.toLowerCase().includes(personaSearch.toLowerCase())
-  );
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (personaRef.current && !personaRef.current.contains(event.target as Node)) {
-        setShowPersonaMenu(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const fetchLocalDatasets = async () => {
     try {
@@ -116,6 +88,22 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
   useEffect(() => {
     fetchCollections();
     fetchLocalDatasets();
+    
+    // Check if distillation is already running in background
+    const checkStatus = async () => {
+      try {
+        const resp = await fetch("http://127.0.0.1:2000/distill/status");
+        const status = await resp.json();
+        if (status.step !== 'idle') {
+          setDistillStatus(status);
+          setShowDistillUI(true);
+        }
+      } catch (e) {
+        console.error("Failed to fetch initial distill status:", e);
+      }
+    };
+    checkStatus();
+
     const history = localStorage.getItem('vml_source_history');
     if (history) setSourceHistory(JSON.parse(history));
   }, []);
@@ -158,39 +146,6 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
     fetchLocalDatasets(); // RE-FETCH on selection
   }, [selectedCollection]);
 
-  // Distillation Status Polling
-  useEffect(() => {
-    let interval: any;
-    if (distillStatus.step !== 'idle' && distillStatus.step !== 'complete' && distillStatus.step !== 'error') {
-      interval = setInterval(async () => {
-        try {
-          const resp = await fetch("http://127.0.0.1:2000/distill/status");
-          const data = await resp.json();
-          setDistillStatus(data);
-          if (data.step === 'complete' || data.step === 'error') {
-            clearInterval(interval);
-            fetchLocalDatasets(); // RE-FETCH on completion
-            
-            // AUTOMATIC REDIRECT: Trigger handoff to Build tab
-            if (data.step === 'complete' && onDistillComplete) {
-              const filename = data.current_task.split('Dataset ready: ')[1] || 
-                               data.current_task.split('Mission Accomplished! Published to: ')[1]?.split('/').pop() + '.jsonl';
-              
-              if (filename && onDistillComplete) {
-                // Short delay to let the user see the "Complete" state
-                setTimeout(() => {
-                   onDistillComplete(filename);
-                }, 1500);
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Status poll failed", e);
-        }
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [distillStatus.step]);
 
   const handleStartDistillation = async (isAgentic: boolean = false) => {
     if (!selectedCollection) return;
@@ -632,70 +587,36 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                             Dataset Ready (Local)
                          </div>
                        ) : (
-                         <div className="flex items-center gap-2 relative" ref={personaRef}>
-                           <div className="relative">
-                             <input 
-                               type="text"
-                               value={showPersonaMenu ? personaSearch : distillPersona}
-                               onChange={(e) => {
-                                 setPersonaSearch(e.target.value);
-                                 setShowPersonaMenu(true);
-                               }}
-                               onFocus={() => {
-                                 setPersonaSearch('');
-                                 setShowPersonaMenu(true);
-                               }}
-                               onKeyDown={(e) => {
-                                 if (e.key === 'Enter') {
-                                   if (filteredPersonas.length > 0) {
-                                     setDistillPersona(filteredPersonas[0]);
-                                   } else {
-                                     setDistillPersona(personaSearch);
-                                   }
-                                   setShowPersonaMenu(false);
-                                 }
-                               }}
-                               placeholder="Search persona..."
-                               className="text-[10px] bg-[#0B090F] border border-indigo-500/30 rounded-lg px-3 py-1.5 text-indigo-200 outline-none focus:border-indigo-500 font-bold uppercase tracking-wider h-8 w-48"
-                             />
-                             {showPersonaMenu && (
-                               <div className="absolute bottom-full mb-2 left-0 w-64 bg-[#140F1D] border border-indigo-500/30 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto p-1 backdrop-blur-xl">
-                                 {filteredPersonas.length > 0 ? (
-                                   filteredPersonas.map(p => (
-                                     <button
-                                       key={p}
-                                       onClick={() => {
-                                         setDistillPersona(p);
-                                         setShowPersonaMenu(false);
-                                       }}
-                                       className="w-full text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-indigo-300 hover:bg-indigo-500/20 rounded-lg transition-all"
-                                     >
-                                       {p}
-                                     </button>
-                                   ))
-                                 ) : (
-                                   <button
-                                     onClick={() => {
-                                       setDistillPersona(personaSearch);
-                                       setShowPersonaMenu(false);
-                                     }}
-                                     className="w-full text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-all"
-                                   >
-                                     Use Custom: "{personaSearch}"
-                                   </button>
-                                 )}
-                               </div>
-                             )}
-                           </div>
-                           <Button 
-                             variant="ghost" 
-                             onClick={() => handleStartDistillation(true)}
-                             className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group h-8"
-                           >
-                             <Sparkles size={12} className="group-hover:animate-pulse" />
-                             Distill
-                           </Button>
-                         </div>
+                         <div className="flex items-center gap-4">
+                            <div className="flex flex-col gap-2 relative">
+                             <label className="text-[10px] font-bold text-indigo-400/60 uppercase tracking-widest pl-1">Expert Persona</label>
+                             <div className="relative">
+                               <input 
+                                  type="text"
+                                  value={distillPersona}
+                                  onChange={(e) => setDistillPersona(e.target.value)}
+                                  placeholder="e.g. Radiologist, Legal Expert..."
+                                  className="text-[11px] bg-[#0B090F] border border-indigo-500/30 rounded-xl px-4 py-2 text-indigo-200 outline-none focus:border-indigo-500 font-bold tracking-wide h-9 w-56 shadow-inner"
+                               />
+                               {distillPersona !== 'Generic' && (
+                                 <button 
+                                   onClick={() => setDistillPersona('Generic')}
+                                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-indigo-400/40 hover:text-indigo-400 transition-colors uppercase font-bold"
+                                 >
+                                   Reset
+                                 </button>
+                               )}
+                             </div>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              onClick={() => handleStartDistillation(true)}
+                              className="text-xs text-indigo-400 hover:bg-indigo-500/10 flex items-center gap-2 px-4 border border-indigo-500/20 bg-indigo-500/5 group h-9 mt-6"
+                            >
+                              <Sparkles size={12} className="group-hover:animate-pulse" />
+                              Distill
+                            </Button>
+                          </div>
                        )}
                       <Button 
                         variant="ghost" 
@@ -722,7 +643,7 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                           <CheckCircle2 className={`${distillStatus.step === 'complete' ? 'text-emerald-400' : 'hidden'}`} size={18} />
                           <h4 className={`text-sm font-bold ${distillStatus.step === 'deploying' || distillStatus.step === 'complete' ? 'text-emerald-200' : 'text-indigo-200'}`}>
                             {distillStatus.step === 'deploying' ? 'Autonomous Deployment Agent' : 
-                             distillStatus.step === 'complete' ? 'Mission Accomplished' : 'Distillation Engine'}
+                             distillStatus.step === 'complete' ? 'Mission Accomplished' : `Mining: ${selectedCollection}`}
                           </h4>
                        </div>
                        <Button 
@@ -758,16 +679,22 @@ export const KnowledgeLibrary: React.FC<{ onDistillComplete?: (id: string) => vo
                     )}
 
                     {distillStatus.step === 'complete' && distillStatus.current_task.includes('http') && (
-                      <div className="pt-4 border-t border-indigo-500/10">
+                      <div className="pt-4 border-t border-indigo-500/10 flex gap-3">
                          <a 
-                           href={distillStatus.current_task.split('Deployed! ')[1]} 
+                           href={distillStatus.current_task.includes('Published to: ') ? distillStatus.current_task.split('Published to: ')[1] : '#'} 
                            target="_blank" 
                            rel="noreferrer"
-                           className="flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-500/10 text-emerald-400 text-sm hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
+                           className="flex-1 flex items-center justify-center gap-2 p-3 rounded-xl bg-emerald-500/10 text-emerald-400 text-sm hover:bg-emerald-500/20 transition-all border border-emerald-500/20"
                          >
                             <ExternalLink size={16} />
                             View on Hugging Face
                          </a>
+                         <button
+                           onClick={() => setShowDistillUI(false)}
+                           className="px-4 py-2 rounded-xl bg-white/5 text-gray-400 text-xs hover:bg-white/10 transition-all"
+                         >
+                            Dismiss
+                         </button>
                       </div>
                     )}
 

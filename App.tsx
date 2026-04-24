@@ -175,6 +175,37 @@ export default function App() {
   const [sftHardware, setSftHardware] = useState("CPU");
   const [sftMaxSteps, setSftMaxSteps] = useState(5);
   const [sftRank, setSftRank] = useState(16);
+  
+  // Distillation State (Persistent across tab switches)
+  const [distillStatus, setDistillStatus] = useState({ step: 'idle', progress: 0, current_task: '' });
+  const [showDistillUI, setShowDistillUI] = useState(false);
+
+  useEffect(() => {
+    // Poll distillation status globally if it's active
+    let interval: any;
+    if (distillStatus.step !== 'idle' && distillStatus.step !== 'complete' && distillStatus.step !== 'error') {
+      interval = setInterval(async () => {
+        try {
+          const resp = await fetch("http://127.0.0.1:2000/distill/status");
+          const status = await resp.json();
+          setDistillStatus(status);
+          if (status.step !== 'idle') setShowDistillUI(true);
+          
+          if (status.step === 'complete') {
+            const filename = status.current_task.split('Dataset ready: ')[1] || 
+                             status.current_task.split('Mission Accomplished! Published to: ')[1]?.split('/').pop() + '.jsonl';
+            
+            if (filename) {
+               setPreSelectedDataset(filename);
+            }
+          }
+        } catch (e) {
+          console.error("Global status poll failed", e);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [distillStatus.step]);
 
   const handleCopyAll = () => {
     let context = "# VML STUDIO WORKFLOW REPORT\n\n";
@@ -333,11 +364,21 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
       for (const blockScript of blocks) {
         const cellId = uuidv4();
         const modelPart =
-          modelId.split("/").pop()?.toLowerCase().replace(/\./g, "-").replace(/_/g, "-") ||
-          "model";
+          modelId
+            .split("/")
+            .pop()
+            ?.toLowerCase()
+            .replace(/\./g, "-")
+            .replace(/_/g, "-") || "model";
         const datasetPart =
-          datasetId.split("/").pop()?.split("_").slice(0, 2).join("-").toLowerCase().replace(/\./g, "-") ||
-          "dataset";
+          datasetId
+            .split("/")
+            .pop()
+            ?.split("_")
+            .slice(0, 2)
+            .join("-")
+            .toLowerCase()
+            .replace(/\./g, "-") || "dataset";
         const modelSlug = `${modelPart}-${datasetPart}-vml1`;
         const deploymentName = modelSlug; // Keep them consistent for simplicity and clarity
 
@@ -1434,6 +1475,10 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
               setPreSelectedDataset(id);
               setActiveView("workflow");
             }}
+            distillStatus={distillStatus}
+            setDistillStatus={setDistillStatus}
+            showDistillUI={showDistillUI}
+            setShowDistillUI={setShowDistillUI}
           />
         ) : activeView === "workflow" ? (
           <div className="flex-1 flex flex-col bg-[#0B090F] overflow-y-auto p-8 items-center space-y-12">
@@ -1441,43 +1486,40 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
               <h2 className="text-3xl font-black text-white tracking-tighter uppercase">
                 Model Production Center
               </h2>
-              <p className="text-sm text-white/40">
-                Select your workflow to begin local optimization. Fine-tune for
-                personality, or quantize for maximum local performance.
-              </p>
+              <p className="text-sm text-white/40">Create your Expert LLMs.</p>
             </div>
 
-            <WorkFlowSwitcher
+            {/* <WorkFlowSwitcher
               active={workflowMode}
               onChange={setWorkflowMode}
-            />
+            /> */}
 
             <div className="w-full max-w-4xl bg-[#140F1D] border border-white/5 rounded-[32px] p-8 shadow-2xl relative group">
               <div className="absolute top-0 right-0 p-12 bg-amber-500/5 blur-[120px] rounded-full group-hover:bg-amber-500/10 transition-colors duration-1000" />
 
-              {workflowMode === "finetune" ? (
-                <FineTuningPanel
-                  onStart={handleStartSFT}
-                  isExecuting={isWorkflowExecuting}
-                  systemInfo={systemInfo}
-                  preSelectedDataset={preSelectedDataset}
-                  onClearSelection={() => setPreSelectedDataset(null)}
-                  deploymentUrl={deploymentUrl}
-                  onTestInArena={() => {
-                    setActiveView("chat");
-                  }}
-                  modelId={sftModelId}
-                  setModelId={setSftModelId}
-                  datasetId={sftDatasetId}
-                  setDatasetId={setSftDatasetId}
-                  hardware={sftHardware}
-                  setHardware={setSftHardware}
-                  maxSteps={sftMaxSteps}
-                  setMaxSteps={setSftMaxSteps}
-                  rank={sftRank}
-                  setRank={setSftRank}
-                />
-              ) : (
+              {/* {workflowMode === "finetune" ? ( */}
+              <FineTuningPanel
+                onStart={handleStartSFT}
+                isExecuting={isWorkflowExecuting}
+                systemInfo={systemInfo}
+                preSelectedDataset={preSelectedDataset}
+                onClearSelection={() => setPreSelectedDataset(null)}
+                deploymentUrl={deploymentUrl}
+                onTestInArena={() => {
+                  setActiveView("chat");
+                }}
+                modelId={sftModelId}
+                setModelId={setSftModelId}
+                datasetId={sftDatasetId}
+                setDatasetId={setSftDatasetId}
+                hardware={sftHardware}
+                setHardware={setSftHardware}
+                maxSteps={sftMaxSteps}
+                setMaxSteps={setSftMaxSteps}
+                rank={sftRank}
+                setRank={setSftRank}
+              />
+              {/* ) : (
                 <QuantizationPanel
                   onStart={handleStartQuantization}
                   isExecuting={isWorkflowExecuting}
@@ -1487,13 +1529,13 @@ upload_to_hf(r"${path}", "${slug}", "${baseModel}", "${datasetId}")`;
                     setActiveView("chat");
                   }}
                 />
-              )}
+              )} */}
             </div>
           </div>
         ) : (
           <>
             {/* Notebook Area */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden pt-6 pb-40 px-4 md:px-8 transition-all duration-500">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden pb-40 px-4 md:px-8 transition-all duration-500">
               <div className="max-w-5xl mx-auto space-y-6">
                 <div className="sticky top-0 z-30 flex justify-end pb-4 -mx-4 px-4 md:-mx-8 md:px-8 bg-gradient-to-b from-[#0B090F] via-[#0B090F] to-transparent pt-4 -mt-4 pointer-events-none">
                   <button

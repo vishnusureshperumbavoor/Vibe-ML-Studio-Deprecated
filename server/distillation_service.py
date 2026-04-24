@@ -27,8 +27,13 @@ class VMLDistiller:
         if not self.api_key:
             raise ValueError("KIMI_API_KEY not found in environment.")
 
+        if persona.lower() == "generic":
+            role_description = "a highly accurate information extractor. Your goal is to extract neutral, factual instruction-response pairs that represent the core content of the document without any departmental bias."
+        else:
+            role_description = f"a {persona}. Your goal is to extract high-quality, diverse instruction-response pairs that represent the document through the specific lens and expertise of your role."
+
         prompt = f"""
-        You are a {persona}. I will provide a text chunk. 
+        You are {role_description}
         Your goal is to extract high-quality, diverse instruction-response pairs for fine-tuning an AI model.
         
         Chunk:
